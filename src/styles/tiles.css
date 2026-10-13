@@ -1,0 +1,59 @@
+/* Tiles. Structure: .tile > .content (text/image), .kids (nested tiles),
+   .bleed (background past the margin), .handle × 8. */
+
+.tile {
+  position: absolute; display: flex; flex-direction: column; isolation: isolate;
+  background-clip: padding-box;
+}
+.tile.live { cursor: move; }
+.tile.live:hover { outline: calc(1px * var(--inv)) solid rgba(47, 111, 237, .6); }
+.tile.selected { outline: calc(2px * var(--inv)) solid var(--accent); z-index: 5; }
+.tile > .kids { position: absolute; pointer-events: none; }
+.tile > .kids > .tile { pointer-events: auto; }
+.tile > .bleed { position: absolute; z-index: -1; pointer-events: none; }
+.tile.section > .content { display: none; }
+
+/* inside a tile: outline every sub-tile so the divisions are visible */
+.paper.scoped .tile.live::after {
+  content: ""; position: absolute; inset: 0; pointer-events: none; border-radius: inherit;
+  outline: calc(1px * var(--inv)) dashed rgba(47, 111, 237, .55);
+}
+
+/* text */
+.tile > .content {
+  position: relative; flex: 0 1 auto; min-height: 0; overflow: hidden; border-radius: inherit;
+  line-height: 1.25; overflow-wrap: break-word; outline: none;
+}
+.tile.has-cols > .content { flex: 1 1 auto; }
+.tile > .content > :is(div, p, h1, h2, h3, ul, ol) { margin: 0 0 var(--ps, 0); }
+.tile > .content :is(ul, ol) { padding-left: 1.3em; }
+.tile > .content:empty::before { content: "Click to type"; opacity: .4; }
+.tile.scope > .content:empty::before { content: none; }
+.tile.editing { cursor: text; }
+.tile.editing > .content { user-select: text; cursor: text; }
+.tile.overflow { box-shadow: inset 0 calc(-4px * var(--inv)) 0 #e5484d; }
+
+/* images */
+.tile.is-image > .content { flex: 1 1 auto; height: 100%; }
+.tile.is-image > .content img { width: 100%; height: 100%; display: block; pointer-events: none; }
+.tile .placeholder {
+  height: 100%; display: flex; align-items: center; justify-content: center; text-align: center;
+  color: #6b7280; font-size: calc(13px * var(--inv)); padding: 8px;
+}
+
+/* resize handles (on the selected tile) */
+.handle {
+  display: none; position: absolute; z-index: 6;
+  width: calc(10px * var(--inv)); height: calc(10px * var(--inv));
+  margin: calc(-5px * var(--inv)) 0 0 calc(-5px * var(--inv));
+  background: #fff; border: calc(1.5px * var(--inv)) solid var(--accent); border-radius: 2px;
+}
+.tile.single > .handle { display: block; }
+.h-n  { left: 50%; top: 0;    cursor: ns-resize; }
+.h-s  { left: 50%; top: 100%; cursor: ns-resize; }
+.h-e  { left: 100%; top: 50%; cursor: ew-resize; }
+.h-w  { left: 0;    top: 50%; cursor: ew-resize; }
+.h-nw { left: 0;    top: 0;    cursor: nwse-resize; }
+.h-se { left: 100%; top: 100%; cursor: nwse-resize; }
+.h-ne { left: 100%; top: 0;    cursor: nesw-resize; }
+.h-sw { left: 0;    top: 100%; cursor: nesw-resize; }

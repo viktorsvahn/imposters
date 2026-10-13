@@ -1,0 +1,53 @@
+/* Tokens, page layout and shared controls. */
+
+:root {
+  --accent: #2f6fed;
+  --accent-soft: #dfe7fb;
+  --accent-soft-border: #b9cbf5;
+  --guide: #ff2e88;
+  --ui-bg: #ffffff;
+  --ui-fg: #1d2128;
+  --ui-muted: #6b7280;
+  --ui-border: #dde1e7;
+  --ui-hover: #e8ebf0;
+  --ui-control: #f3f4f6;
+  --stage-bg: #e6e9ee;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-size: 13px;
+  color: var(--ui-fg);
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body { display: flex; flex-direction: column; background: var(--stage-bg); overflow: hidden; }
+
+button {
+  font: inherit; color: inherit; background: var(--ui-control); border: 1px solid var(--ui-border);
+  border-radius: 6px; padding: 5px 10px; cursor: pointer; white-space: nowrap;
+}
+button:hover:not(:disabled) { background: var(--ui-hover); }
+button:disabled { opacity: .4; cursor: default; }
+button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+button.primary:hover { background: #255fd0; }
+
+/* main area: the stage (scrolling around the paper) and the settings panel */
+main { flex: 1; display: flex; min-height: 0; position: relative; }
+.stage { flex: 1; overflow: auto; display: flex; }
+.sizer { position: relative; margin: auto; flex-shrink: 0; }
+body.panel-hidden .inspector { display: none; }
+
+/* short messages */
+.toast {
+  position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%) translateY(20px);
+  background: #1d2128; color: #fff; padding: 8px 14px; border-radius: 8px; opacity: 0;
+  transition: opacity .2s, transform .2s; pointer-events: none; z-index: 100;
+}
+.toast.show { opacity: 1; transform: translateX(-50%); }
+
+/* the hint bar (what a click would do) */
+.hint {
+  position: fixed; left: 12px; bottom: 12px; z-index: 50; pointer-events: none;
+  background: rgba(29, 33, 40, .88); color: #fff; padding: 6px 10px; border-radius: 6px; font-size: 12px;
+  opacity: 0; transition: opacity .15s;
+}
+.hint.show { opacity: 1; }

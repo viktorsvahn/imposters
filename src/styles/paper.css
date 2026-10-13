@@ -1,0 +1,54 @@
+/* The paper and the overlays drawn on it (grid, guides, hover, mask).
+   Sizes that should stay constant on screen are multiplied by --inv (1/zoom). */
+
+.paper {
+  position: absolute; transform-origin: 0 0;
+  background: #fff; box-shadow: 0 2px 12px rgba(0, 0, 0, .15);
+  user-select: none; --inv: 1;
+}
+
+/* the current level's overlays */
+#scopeLayer { position: absolute; pointer-events: none; z-index: 20; }
+#guides, #hover, #mask { position: absolute; inset: 0; pointer-events: none; }
+#mask { display: none; box-shadow: 0 0 0 100000px rgba(225, 229, 236, .72); }
+.paper.scoped #mask { display: block; }
+
+.grid { position: absolute; inset: 0; pointer-events: none; }
+.grid .marginbox { position: absolute; outline: calc(1px * var(--inv)) dashed rgba(47, 111, 237, .35); }
+.grid .col { position: absolute; background: rgba(47, 111, 237, .05); }
+.paper.scoped .grid .marginbox { outline-color: rgba(47, 111, 237, .7); }
+
+/* snap guides and the draft rectangle while drawing */
+.guide { position: absolute; }
+.guide.v { top: 0; bottom: 0; border-left: calc(1px * var(--inv)) solid var(--guide); }
+.guide.h { left: 0; right: 0; border-top: calc(1px * var(--inv)) solid var(--guide); }
+.draft { position: absolute; background: rgba(47, 111, 237, .12); outline: calc(1.5px * var(--inv)) dashed var(--accent); }
+
+/* seams, cut previews and + buttons */
+.seamline { position: absolute; }
+.seamline.v { border-left: calc(2px * var(--inv)) solid var(--accent); margin-left: calc(-1px * var(--inv)); }
+.seamline.h { border-top: calc(2px * var(--inv)) solid var(--accent); margin-top: calc(-1px * var(--inv)); }
+.preview { position: absolute; background: rgba(47, 111, 237, .12); outline: calc(1.5px * var(--inv)) dashed var(--accent); }
+.cutband { position: absolute; background: var(--accent); opacity: .55; }
+.plus {
+  position: absolute; width: calc(22px * var(--inv)); height: calc(22px * var(--inv));
+  margin: calc(-11px * var(--inv)) 0 0 calc(-11px * var(--inv)); border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--accent); color: #fff; font: 600 calc(18px * var(--inv)) / 1 system-ui, sans-serif;
+  box-shadow: 0 calc(1px * var(--inv)) calc(4px * var(--inv)) rgba(0, 0, 0, .3);
+}
+.plus.idle {
+  width: calc(16px * var(--inv)); height: calc(16px * var(--inv));
+  margin: calc(-8px * var(--inv)) 0 0 calc(-8px * var(--inv)); font-size: calc(13px * var(--inv));
+  background: #fff; color: var(--accent); border: calc(1.5px * var(--inv)) solid var(--accent); opacity: .85;
+}
+.splitlabel {
+  position: absolute; transform: translate(-50%, -50%); white-space: nowrap; pointer-events: none;
+  background: var(--accent); color: #fff; border-radius: calc(4px * var(--inv));
+  padding: calc(2px * var(--inv)) calc(6px * var(--inv)); font: 600 calc(12px * var(--inv)) / 1.3 system-ui, sans-serif;
+}
+
+/* cursors for what a click would do */
+.paper.seam-x, .paper.seam-x * { cursor: col-resize !important; }
+.paper.seam-y, .paper.seam-y * { cursor: row-resize !important; }
+.paper.on-plus, .paper.on-plus * { cursor: copy !important; }

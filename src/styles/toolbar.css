@@ -1,0 +1,20 @@
+/* The main toolbar. */
+
+.toolbar {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 8px 12px; background: var(--ui-bg); border-bottom: 1px solid var(--ui-border);
+}
+.brand { font-weight: 700; font-size: 15px; margin-right: 6px; }
+.group { display: flex; gap: 2px; }
+.spacer { flex: 1; }
+#zoomLabel { min-width: 56px; }
+#panelBtn.on { background: var(--accent-soft); }
+
+.toolbar .parts { display: flex; align-items: center; gap: 4px; padding: 0 6px 0 2px; color: var(--ui-muted); }
+.toolbar .parts input { width: 44px; font: inherit; padding: 4px; border: 1px solid var(--ui-border); border-radius: 6px; }
+
+/* breadcrumbs: where you are */
+.crumbs { align-items: center; gap: 2px; padding: 2px 4px; background: var(--ui-control); border-radius: 8px; }
+.crumbs span { color: var(--ui-muted); padding: 0 2px; }
+.crumbs button { background: none; border-color: transparent; padding: 3px 8px; }
+.crumbs button.on { background: #fff; border-color: var(--ui-border); font-weight: 600; }

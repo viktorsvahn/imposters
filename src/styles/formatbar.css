@@ -1,0 +1,54 @@
+/* The formatting toolbar and its drop-down menus. */
+
+.fmtbar {
+  position: relative; display: flex; align-items: center; gap: 3px; flex-wrap: wrap;
+  padding: 5px 12px; background: #f8f9fb; border-bottom: 1px solid var(--ui-border);
+}
+.fmtbar select, .fmtbar input {
+  font: inherit; padding: 4px 6px; border: 1px solid var(--ui-border); border-radius: 6px; background: #fff; color: var(--ui-fg);
+}
+#fStyle, #fFont { width: 104px; }
+.fmtbar label select { padding: 4px 2px; }
+.fmtbar .fsize { display: inline-flex; align-items: center; gap: 2px; }
+#fSize { width: 44px; text-align: center; }
+.fmtbar button {
+  padding: 4px 6px; min-width: 28px; display: inline-flex; align-items: center; justify-content: center;
+  background: transparent; border-color: transparent;
+}
+.fmtbar button:hover:not(:disabled) { background: var(--ui-hover); }
+.fmtbar button.on { background: var(--accent-soft); border-color: var(--accent-soft-border); }
+.fmtbar svg { stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; }
+.fmtbar .sep { width: 1px; height: 22px; background: var(--ui-border); margin: 0 2px; }
+.fmtbar label { display: inline-flex; align-items: center; gap: 3px; color: var(--ui-muted); font-size: 14px; margin-left: 2px; }
+.fmtbar.inactive :is(select, input, button[data-f]) { opacity: .45; }
+.fmtbar .lbl { margin-left: 4px; font-size: 12px; }
+@media (max-width: 1500px) { .fmtbar .lbl { display: none; } }
+
+/* colour swatch under the text-colour / fill buttons */
+.fmtbar .swbtn { position: relative; font-weight: 700; }
+.fmtbar .swbtn::after {
+  content: ""; position: absolute; left: 6px; right: 6px; bottom: 2px; height: 4px; border-radius: 1px; background: var(--sw, #000);
+}
+.fmtbar .swbtn.fill.nofill::after { background: repeating-linear-gradient(45deg, #ccc 0 3px, #fff 3px 6px); }
+
+/* menus */
+.colormenu {
+  position: absolute; z-index: 60; width: 230px; padding: 8px; background: #fff;
+  border: 1px solid var(--ui-border); border-radius: 10px; box-shadow: 0 8px 24px rgba(0, 0, 0, .18);
+}
+.colormenu button { min-width: 0; }
+.colormenu .none { width: 100%; justify-content: flex-start; border: 1px solid var(--ui-border); margin-bottom: 6px; }
+.colormenu .cm-h { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--ui-muted); margin: 6px 0 4px; }
+.colormenu .cm-roles { display: grid; grid-template-columns: 1fr 1fr; gap: 2px; }
+.colormenu .role-sw { justify-content: flex-start; gap: 6px; padding: 4px; font-size: 12px; }
+.colormenu .role-sw span { width: 16px; height: 16px; border-radius: 3px; border: 1px solid rgba(0, 0, 0, .15); flex: none; }
+.colormenu .cm-grid { display: grid; grid-template-columns: repeat(8, 1fr); gap: 4px; }
+.colormenu .sw { height: 22px; padding: 0; border: 1px solid rgba(0, 0, 0, .15) !important; border-radius: 4px; }
+.colormenu .cm-custom { display: flex; align-items: center; justify-content: space-between; margin-top: 8px; font-size: 12px; color: var(--ui-fg); }
+.colormenu .cm-custom input { width: 44px; height: 26px; padding: 1px; }
+
+.bordermenu { width: 250px; }
+.bordermenu .bm-row { display: flex; flex-wrap: wrap; gap: 3px; align-items: center; }
+.bordermenu .bm-row button { border: 1px solid var(--ui-border); padding: 3px 7px; font-size: 12px; }
+.bordermenu .bm-row button.on { background: var(--accent-soft); border-color: var(--accent-soft-border); }
+.bordermenu .bm-w { width: 56px; padding: 3px 4px; }

@@ -8,9 +8,13 @@
 <body>
   <header class="toolbar">
     <span class="brand">Imposters</span>
+    <div class="group project-group">
+      <button id="projectBtn" class="project-btn" title="Project: new, open, rename, import">Project ▾</button>
+      <span id="posterName" class="poster-name" title="The poster you are editing (switch in the Posters sidebar)"></span>
+    </div>
     <div class="group crumbs" id="crumbs" title="Where you are. Click to go back out."></div>
     <div class="group">
-      <button data-act="enter" data-needs="1" title="Go into the selected tile to divide it (E, or double-click a divided tile)">Enter ⤵</button>
+      <button data-act="enter" data-needs="1" title="Go into the selected tile to divide it (E, or double-click it)">Enter ⤵</button>
       <button data-act="up" title="Back out to the parent level (Esc)">Up ⤴</button>
     </div>
     <div class="group">
@@ -18,9 +22,10 @@
       <button data-act="add-image" title="Add an image tile in the largest empty space (I)">+ Image</button>
     </div>
     <div class="group">
-      <label class="parts" title="How many equal parts Ctrl+Shift and the Split buttons make (keys 2–9)">Parts <input type="number" id="parts" min="2" max="12" value="2"></label>
+      <label class="parts" title="How many equal parts Ctrl+Alt+Shift and the Split buttons make (keys 2–9)">Parts <input type="number" id="parts" min="2" max="12" value="2"></label>
       <button data-act="split-v" data-needs="1" title="Split the selected tile into columns (V)">Split ◫</button>
       <button data-act="split-h" data-needs="1" title="Split the selected tile into rows (H)">Split ⊟</button>
+      <button data-act="merge" title="Merge the selected tiles into one (M) — Shift-click to select several">Merge</button>
       <button data-act="fill" data-needs="1" title="Grow the selected tiles into the free space around them (F)">Fill</button>
       <button data-act="fill-all" title="Grow every tile until all gaps are closed">Fill gaps</button>
     </div>
@@ -43,18 +48,20 @@
     <div class="group">
       <button id="designBtn" title="Colours and text styles for the whole poster">Design</button>
       <button id="panelBtn" title="Show the settings panel">⚙ Panel</button>
+      <button id="liveBtn" title="Live view: the poster as published — interactive — next to the editor">◧ Live view</button>
     </div>
     <div class="group">
-      <button data-act="new" title="Start a new document">New</button>
-      <button data-act="open" title="Open a saved .json document">Open</button>
-      <button data-act="save" title="Download as .json (Ctrl+S)">Save</button>
-      <button data-act="print" class="primary" title="Print or save as PDF at the exact paper size">PDF / Print</button>
+      <button data-act="save" title="Save now (Ctrl+S). Changes are also saved automatically.">Save</button>
+      <button data-act="html" title="Save as a web page: one file, interactive plots">HTML</button>
+      <button data-act="print" class="primary" title="Save as PDF at the exact paper size">PDF</button>
     </div>
   </header>
   <!-- built by src/ui/formatbar.ts -->
   <div id="fmtbar" class="fmtbar inactive"></div>
 
   <main>
+    <nav id="activity" class="activity" aria-label="Sidebar"></nav>
+    <aside id="sidePanel" class="side-panel"></aside>
     <div id="stage" class="stage">
       <div id="sizer" class="sizer">
         <div id="paper" class="paper">
@@ -69,7 +76,19 @@
       </div>
       <div id="hint" class="hint"></div>
     </div>
+    <section id="master" class="master" hidden>
+      <div class="master-bar"><b>Master poster</b><span class="muted">Click any part to change how it looks. Changes apply to the open poster.</span><button id="masterClose">Back to the poster</button></div>
+      <div id="masterStage" class="master-stage"><div id="masterSizer" class="master-sizer"><div id="masterPaper" class="paper master-paper"><div id="masterTiles"></div></div></div></div>
+    </section>
+    <section id="dataEditor" class="data-editor" hidden></section>
+    <section id="plotEditor" class="plot-editor" hidden></section>
 
+    <div id="liveSplit" class="live-split" hidden title="Drag to resize the live view"></div>
+    <section id="liveView" class="live-view" hidden>
+      <div class="live-head"><b>Live view</b><span class="muted">the poster as published — hover over plots</span><span class="spacer"></span>
+        <button data-act="html" title="Save this page as one HTML file">Export HTML…</button></div>
+      <iframe id="liveFrame" title="Live view of the published poster"></iframe>
+    </section>
     <aside class="inspector">
       <div class="tabs"><button data-tab="layout" class="on">Layout</button><button data-tab="design">Design</button></div>
       <div id="tabLayout">
@@ -82,7 +101,8 @@
         </div>
         <div class="row">
           <label>Inner margin (mm)<input type="number" id="sInset" min="0" step="1" title="Space between this section's edge and its tiles"></label>
-          <label>Inner gutter (mm)<input type="number" id="sGutter" min="0" step="1" title="Space between this section's tiles (blank = paper gutter)"></label>
+          <label>Inner gutter ↔ (mm)<input type="number" id="sGutter" min="0" step="1" title="Gap between side-by-side tiles inside (blank: the design's)"></label>
+          <label>Inner gutter ↕ (mm)<input type="number" id="sGutterY" min="0" step="1" title="Gap between stacked tiles inside (blank: the design's)"></label>
         </div>
         <div class="row" title="Design colours follow the Design tab; Custom uses the picker">
           <label>Fill<select id="sFillRole"><option value="">None</option><option value="@paper">Paper</option><option value="@tile">Tiles</option><option value="@header">Poster header</option><option value="@footer">Poster footer</option><option value="@tileHeader">Tile headers</option><option value="@tileFooter">Tile footers</option><option value="custom">Custom</option></select></label>
@@ -124,7 +144,7 @@
         </div>
         <div class="row">
           <label>Margin (mm)<input type="number" id="pMargin" min="0" step="1"></label>
-          <label>Gutter (mm)<input type="number" id="pGutter" min="0" step="1"></label>
+          <label title="Set in Design → Spacing">Gutter<span class="muted" id="pGutterNote"></span></label>
         </div>
         <div class="row">
           <label>Columns<input type="number" id="pCols" min="0" max="24" step="1"></label>
@@ -150,9 +170,21 @@
           <label>&nbsp;<input type="color" id="tBg"></label>
         </div>
         <label class="check" title="Where this tile touches the margin, its background continues to the edge of the paper (or of the tile it sits in). Text and tiles inside stay within the margin."><input type="checkbox" id="tBleed"> Bleed background past margin</label>
+        <div class="row" title="An image behind the text: from the project's images (Images sidebar)">
+          <label>Background image<select id="tBgImg"></select></label>
+          <label>Shows (%)<input type="number" id="tBgOp" min="0" max="100" step="5"></label>
+        </div>
+        <div class="row" id="bgFitRow">
+          <label>Image fit<select id="tBgFit"><option value="cover">Fill the tile (crop)</option><option value="contain">Whole image</option></select></label>
+          <label>&nbsp;</label>
+        </div>
         <div class="row">
           <label>Text style<select id="tStyle" title="Text style from the Design tab"></select></label>
-          <label>Padding (mm)<input type="number" id="tPad" min="0" step="1"></label>
+          <label>&nbsp;</label>
+        </div>
+        <div class="row" title="Whitespace between the tile's edge and its text. Blank: the design's (Design → Spacing)">
+          <label>Space left/right (mm)<input type="number" id="tPadX" min="0" step="0.5"></label>
+          <label>Space top/bottom (mm)<input type="number" id="tPadY" min="0" step="0.5"></label>
         </div>
         <div class="row" title="Text colour: from the text style, a design colour, or custom">
           <label>Text colour<select id="tTextRole"><option value="">Text style</option><option value="@tile">Tiles</option><option value="@header">Poster header</option><option value="@footer">Poster footer</option><option value="@tileHeader">Tile headers</option><option value="@tileFooter">Tile footers</option><option value="custom">Custom</option></select></label>
@@ -180,11 +212,16 @@
         </div>
         <div id="textOpts" class="row">
           <label>Text columns<input type="number" id="tCols" min="1" max="8" step="1"></label>
+          <label class="check inline" title="Split long words at line ends with a hyphen (nicer justified text)"><input type="checkbox" id="tHyph"> Hyphenate</label>
+        </div>
+        <div id="flowOpts" class="row" title="With text columns: how numbered and bulleted lists run">
+          <label>Lists in columns<select id="tFlow"><option value="down">down each column</option><option value="across">across, row by row</option></select></label>
           <label>&nbsp;</label>
         </div>
-        <div id="secOpts" class="row" title="This tile is divided into tiles. Inner margin = space between its edge and its tiles; inner gutter = space between its tiles (blank = paper gutter).">
+        <div id="secOpts" class="row" title="This tile is divided into tiles. Inner margin = space between its edge and its tiles; inner gutter = space between its tiles (blank = none: they touch).">
           <label>Inner margin (mm)<input type="number" id="tInset" min="0" step="1"></label>
-          <label>Inner gutter (mm)<input type="number" id="tGutter" min="0" step="1"></label>
+          <label>Inner gutter ↔ (mm)<input type="number" id="tGutter" min="0" step="1" title="Gap between side-by-side tiles inside (blank: the design's)"></label>
+          <label>Inner gutter ↕ (mm)<input type="number" id="tGutterY" min="0" step="1" title="Gap between stacked tiles inside (blank: the design's)"></label>
         </div>
         <div id="imgOpts" class="row">
           <label>Image fit
@@ -208,24 +245,17 @@
       </div>
 
       <div id="tabDesign" hidden>
-        <section>
-          <h2>Colours</h2>
-          <p class="muted">Background and text colour for each part of the poster. Tiles using these follow every change.</p>
-          <div class="role role-head"><span></span><span>Fill</span><span></span><span>Text</span><span></span></div>
-          <div id="colorRoles"></div>
+        <section class="design-intro">
+          <p class="muted">The look of the whole poster. Tiles using these colours and text styles follow every change.</p>
         </section>
-        <section>
-          <h2>Text styles</h2>
-          <p class="muted">Tick the styles offered while writing and rename them as you like; add your own with +.</p>
-          <div id="styleList"></div>
-          <button id="designReset">Reset design to defaults</button>
-        </section>
+        <div id="designCats"></div>
+        <section><button id="designReset">Reset design to defaults</button></section>
       </div>
 
       <section class="help">
         <h2>How it works</h2>
         <ul>
-          <li><b>Hold Shift</b> and point at a tile edge: a <b>+</b> slides along it. Click to split the tile there — a + on the right/left edge splits it into upper and lower tiles, on the bottom/top edge into left and right. Snaps to ½ ⅓ ¼ and to other tiles' edges (Alt: no snapping). <b>Ctrl+Shift</b> splits into equal parts instead — as many as <b>Parts</b> says (keys 2–9). Shift-click empty space to fill it.</li>
+          <li><b>Hold Ctrl+Shift</b> and point at a tile edge: a <b>+</b> slides along it. Click to split the tile there — a + on the right/left edge splits it into upper and lower tiles, on the bottom/top edge into left and right. Snaps to ½ ⅓ ¼ and to other tiles' edges. <b>Ctrl+Alt+Shift</b> splits into equal parts instead — as many as <b>Parts</b> says (keys 2–9). Ctrl+Shift-click empty space to fill it.</li>
           <li><b>Levels:</b> divide the poster into sections first, then <b>Enter</b> a section (double-click, or E) and divide it further. Everything outside is dimmed; Esc or a click outside goes back up. Each divided tile has its own inner margin and gutter, and its tiles reflow when it is resized.</li>
           <li><b>Bleed</b> (Tile panel): the background runs to the paper edge wherever the tile touches the margin, while its text and inner tiles stay within the margin. The header and footer use this.</li>
           <li><b>Header / Footer</b> checkboxes (Paper panel, or the Section panel inside a tile) add or remove a full-width band at the top/bottom; the other tiles make room. Inside tiles they are off by default.</li>
@@ -235,7 +265,7 @@
           <li><b>+ Text / + Image</b> fill the largest empty area.</li>
           <li><b>Split</b> a tile to subdivide it; <b>Fill</b> grows it to its neighbours.</li>
           <li>Tiles snap to margins, columns, other tiles and the gutter between them.</li>
-          <li><b>Click text to type</b> — anywhere, even inside divided tiles. Drag to move a tile; Esc stops typing. <b>Go inside a tile</b> to create tiles there: Enter ⤵, E, or Ctrl+Enter (also while typing); double-click works on tiles that are already divided. Double-click a handle to grow that side.</li>
+          <li><b>Click text to type</b> — anywhere, even inside divided tiles. Drag to move a tile; Esc stops typing. <b>Go inside a tile</b> to create tiles there: double-click it, or Enter ⤵, E, or Ctrl+Enter (also while typing). Everything outside is greyed out; Split then divides that tile. Double-click a handle to grow that side.</li>
           <li>Drop or paste images onto the paper or a tile.</li>
           <li>Shift-click to multi-select. Arrows nudge (Shift = 10 mm), Alt+arrows grow.</li>
           <li><b>Design tab</b>: colours for paper, tiles, headers and footers, and the text styles offered while writing (tick, rename, restyle).</li>
@@ -244,9 +274,28 @@
     </aside>
   </main>
 
+  <div id="welcome" class="welcome" hidden>
+    <div class="welcome-card">
+      <h1>Imposters</h1>
+      <p class="muted">Posters and figures, kept together in a project folder.</p>
+      <div class="welcome-actions">
+        <button class="primary" data-proj="new">New project…</button>
+        <button data-proj="open">Open project…</button>
+      </div>
+      <div id="welcomeRecent"></div>
+    </div>
+  </div>
+  <dialog id="askDialog" class="ask">
+    <form method="dialog">
+      <label><span id="askLabel"></span><input id="askInput" autocomplete="off" spellcheck="false"></label>
+      <div class="ask-btns"><button value="cancel" formnovalidate>Cancel</button><button value="ok" class="primary">OK</button></div>
+    </form>
+  </dialog>
   <div id="toast" class="toast"></div>
   <input type="file" id="fileImage" accept="image/*" hidden>
   <input type="file" id="fileDoc" accept=".json,application/json" hidden>
+  <input type="file" id="fileImages" accept="image/*" multiple hidden>
+  <input type="file" id="fileData" accept=".csv,.tsv,.json" multiple hidden>
   <style id="pageStyle"></style>
   <style id="designStyle"></style>
   <datalist id="swatches"></datalist>

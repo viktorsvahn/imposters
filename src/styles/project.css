@@ -1,0 +1,40 @@
+/* Project controls, pop-up menus, the welcome screen and the name dialog. */
+
+.project-group { align-items: center; }
+.project-btn { font-weight: 600; max-width: 220px; overflow: hidden; text-overflow: ellipsis; }
+.poster-name {
+  max-width: 200px; padding: 0 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ui-muted);
+}
+
+.popmenu {
+  position: fixed; z-index: 50; min-width: 190px; padding: 4px; display: flex; flex-direction: column;
+  background: var(--ui-bg); border: 1px solid var(--ui-border); border-radius: 8px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, .14);
+}
+.popmenu button { text-align: left; background: none; border-color: transparent; }
+.popmenu hr { width: 100%; border: 0; border-top: 1px solid var(--ui-border); margin: 4px 0; }
+
+.welcome {
+  position: fixed; inset: 0; z-index: 40; display: flex; align-items: center; justify-content: center;
+  background: var(--stage-bg);
+}
+.welcome[hidden] { display: none; }
+.welcome-card {
+  width: min(520px, calc(100vw - 32px)); padding: 28px; background: var(--ui-bg);
+  border: 1px solid var(--ui-border); border-radius: 12px; box-shadow: 0 6px 30px rgba(0, 0, 0, .08);
+}
+.welcome-card h1 { margin: 0 0 4px; font-size: 22px; }
+.welcome-card p { margin: 0; color: var(--ui-muted); }
+.welcome-card h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--ui-muted); margin: 22px 0 6px; }
+.welcome-actions { display: flex; gap: 8px; margin-top: 18px; }
+.welcome .recent {
+  display: flex; flex-direction: column; align-items: flex-start; width: 100%; margin-top: 4px;
+  background: none; text-align: left;
+}
+.welcome .recent span { color: var(--ui-muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+
+.ask { border: 1px solid var(--ui-border); border-radius: 10px; padding: 18px; min-width: 320px; }
+.ask::backdrop { background: rgba(0, 0, 0, .2); }
+.ask label { display: flex; flex-direction: column; gap: 6px; font-weight: 600; }
+.ask input { font: inherit; font-weight: normal; padding: 6px 8px; border: 1px solid var(--ui-border); border-radius: 6px; }
+.ask-btns { display: flex; justify-content: flex-end; gap: 6px; margin-top: 14px; }

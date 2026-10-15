@@ -6,20 +6,22 @@ import { arrange } from '../commands';
 import { MIN, SIZES } from '../constants';
 import { setBand } from '../editor/actions';
 import { commit } from '../editor/history';
-import { render } from '../editor/hooks';
+import { notify, render } from '../editor/hooks';
 import { savePrefs } from '../editor/prefs';
 import { editor, scopeTile, selectedTiles } from '../editor/store';
 import { zoomFit } from '../interaction/zoom';
 import { bandOf } from '../layout/bands';
 import { resizePaper } from '../layout/paper';
-import { offeredStyles, resolveBg, resolveText } from '../model/design';
+import { designSpace, offeredStyles, resolveBg, resolveText } from '../model/design';
 import { applyStyle, lookOf } from '../model/style';
 import { isSection } from '../model/tree';
 import type { Paper, Tile } from '../model/types';
-import { rgbToHex, round } from '../util';
+import { project } from '../project/session';
+import { escapeHtml, rgbToHex, round } from '../util';
 import { $, $$, setVal } from '../view/dom';
+import { minimumSize } from '../view/measure';
 import { contentEl } from '../view/paper';
-import { fontOptions } from './formatbar';
+import { fontOptions } from '../view/fonts';
 import { tileLabel } from './labels';
 
 /** Colour controls: a role select (design colour / none / custom) + a picker. */
@@ -38,7 +40,9 @@ export function updateInspector(): void {
     $('#scopeSize').textContent = `${round(s.w)} × ${round(s.h)} mm · ${n} tile${n === 1 ? '' : 's'} inside`;
     setVal('#sInset', s.inset || 0);
     setVal('#sGutter', s.gutter ?? '');
-    $<HTMLInputElement>('#sGutter').placeholder = String(doc.paper.gutter);
+    setVal('#sGutterY', s.gutterY ?? '');
+    $<HTMLInputElement>('#sGutter').placeholder = String(doc.design.localGutter); // blank: the design's
+    $<HTMLInputElement>('#sGutterY').placeholder = String(doc.design.localGutterY);
     showColor('#sFillRole', '#sBg', s.bg, (v) => resolveBg(design, v));
     setVal('#sBorderW', round(s.borderW));
     setVal('#sBorderC', s.borderC);
@@ -55,7 +59,7 @@ export function updateInspector(): void {
   setVal('#pW', round(p.w));
   setVal('#pH', round(p.h));
   setVal('#pMargin', p.margin);
-  setVal('#pGutter', p.gutter);
+  $('#pGutterNote').textContent = `↔ ${p.gutter} ↕ ${p.gutterY} mm · inside tiles ↔ ${doc.design.localGutter} ↕ ${doc.design.localGutterY} mm (Design → Spacing)`;
   setVal('#pCols', p.columns);
 
   const ts = selectedTiles();
@@ -80,16 +84,35 @@ export function updateInspector(): void {
   setVal('#tSize', look.text.fontSize ?? '');
   const c = contentEl(look.text.id);
   if (c) $<HTMLInputElement>('#tSize').placeholder = String(Math.round(parseFloat(getComputedStyle(c).fontSize) * 0.75));
-  setVal('#tPad', t.padding);
+  const ds = designSpace(design, t);
+  setVal('#tPadX', t.padX ?? '');
+  setVal('#tPadY', t.padY ?? '');
+  $<HTMLInputElement>('#tPadX').placeholder = String(ds.x); // blank: the design's
+  $<HTMLInputElement>('#tPadY').placeholder = String(ds.y);
   setVal('#tRadius', round(t.radius));
   setVal('#tBorderW', round(t.borderW));
   setVal('#tBorderC', t.borderC);
   setVal('#tFit', t.fit);
   setVal('#tCols', t.cols || 1);
+  setVal('#tHyph', !!lookOf(t).text.hyphens);
+  $('#flowOpts').hidden = !(t.type === 'text' && (lookOf(t).text.cols || 1) > 1);
+  setVal('#tFlow', lookOf(t).text.flow ?? 'down');
+  // background image: the project's images
+  const sel = $<HTMLSelectElement & { _opts?: string }>('#tBgImg');
+  const imgs = (project.manifest?.assets ?? []).filter((a) => a.kind !== 'plot');
+  const imgOpts = '<option value="">None</option>' + imgs.map((a) => `<option value="${escapeHtml(a.src)}">${escapeHtml(a.name)}</option>`).join('');
+  if (sel._opts !== imgOpts) { sel.innerHTML = imgOpts; sel._opts = imgOpts; }
+  setVal('#tBgImg', t.bgImage ?? '');
+  setVal('#tBgOp', Math.round((t.bgImageOpacity ?? 1) * 100));
+  setVal('#tBgFit', t.bgImageFit ?? 'cover');
+  $('#bgFitRow').hidden = !t.bgImage;
+  $<HTMLInputElement>('#tBgOp').disabled = !t.bgImage;
   setVal('#tBleed', !!t.bleed);
   setVal('#tInset', t.inset || 0);
   setVal('#tGutter', t.gutter ?? '');
-  $<HTMLInputElement>('#tGutter').placeholder = String(doc.paper.gutter);
+  setVal('#tGutterY', t.gutterY ?? '');
+  $<HTMLInputElement>('#tGutter').placeholder = String(doc.design.localGutter); // blank: the design's
+  $<HTMLInputElement>('#tGutterY').placeholder = String(doc.design.localGutterY);
   const sec = isSection(t);
   $('#textOpts').hidden = sec || t.type !== 'text';
   $('#secOpts').hidden = !sec;
@@ -112,10 +135,16 @@ const optionalNum = (min: number): Parse => (v) => (v.trim() === '' ? undefined 
 /** Bind an input to a property of some tiles (live: update while dragging a picker). */
 function bindProp(sel: string, prop: keyof Tile, parse: Parse, targets: () => Tile[], live = false, cascade = true): void {
   const el = $<HTMLInputElement>(sel);
+  const own = prop === 'borderW' || prop === 'borderC' || prop === 'radius';
   const apply = () => {
     const v = parse(el.value);
     if (v === null || Number.isNaN(v)) return;
     for (const t of targets()) {
+      if (own) t.ownBorder = true; // set here: the tile's own border, not the design's
+      if ((prop === 'w' || prop === 'h') && typeof v === 'number') {
+        const min = minimumSize(t, prop === 'w' ? 'x' : 'y');
+        if (v < min - 0.05) { notify(`The content needs ${round(min)} mm`); applyStyle(editor.doc, t, prop, round(min)); continue; }
+      }
       const val = v === undefined ? null : v;
       if (cascade) applyStyle(editor.doc, t, prop, val);
       else (t as unknown as Record<string, unknown>)[prop] = val;
@@ -131,6 +160,7 @@ const scopeTargets = (): Tile[] => (scopeTile() ? [scopeTile()!] : []);
 export function bindInspector(): void {
   const doc = () => editor.doc;
   $('#tFont').innerHTML = fontOptions(true);
+  $('#tFont').dataset.fontPicker = '';
 
   // the selected tiles
   const tile = (sel: string, prop: keyof Tile, parse: Parse, live = false) => bindProp(sel, prop, parse, selectedTiles, live);
@@ -143,7 +173,8 @@ export function bindInspector(): void {
   tile('#tFont', 'font', str);
   tile('#tSize', 'fontSize', optionalNum(1));
   tile('#tStyle', 'ts', (v) => (v === 'body' ? '' : v));
-  tile('#tPad', 'padding', num(0));
+  tile('#tPadX', 'padX', optionalNum(0)); // blank: the design's
+  tile('#tPadY', 'padY', optionalNum(0));
   tile('#tRadius', 'radius', num(0));
   tile('#tBorderW', 'borderW', num(0));
   tile('#tBorderC', 'borderC', str, true);
@@ -151,6 +182,7 @@ export function bindInspector(): void {
   tile('#tCols', 'cols', (v) => Math.min(8, Math.max(1, Math.round(+v) || 1)));
   tile('#tInset', 'inset', num(0));
   tile('#tGutter', 'gutter', optionalNum(0));
+  tile('#tGutterY', 'gutterY', optionalNum(0));
 
   // role selects: "" = none/default, "@role" = design colour, "custom" = use the picker
   const roleSelect = (sel: string, pick: string, prop: keyof Tile, targets: () => Tile[]) =>
@@ -169,6 +201,7 @@ export function bindInspector(): void {
   const scope = (sel: string, prop: keyof Tile, parse: Parse, live = false) => bindProp(sel, prop, parse, scopeTargets, live, false);
   scope('#sInset', 'inset', num(0));
   scope('#sGutter', 'gutter', optionalNum(0));
+  scope('#sGutterY', 'gutterY', optionalNum(0));
   scope('#sBg', 'bg', str, true);
   scope('#sBorderW', 'borderW', num(0));
   scope('#sBorderC', 'borderC', str, true);
@@ -184,6 +217,20 @@ export function bindInspector(): void {
     render();
   });
   bleed('#tBleed', selectedTiles);
+  const each = (sel: string, set: (t: Tile, v: string) => void) => $(sel).addEventListener('change', (e) => {
+    for (const t of selectedTiles()) set(t, (e.target as HTMLInputElement).value);
+    commit();
+    render();
+  });
+  each('#tFlow', (t, v) => applyStyle(doc(), t, 'flow', v === 'across' ? 'across' : 'down'));
+  each('#tBgImg', (t, v) => { if (v) t.bgImage = v; else delete t.bgImage; });
+  each('#tBgOp', (t, v) => { const n = parseFloat(v); if (n >= 0) t.bgImageOpacity = Math.min(100, n) / 100; });
+  each('#tBgFit', (t, v) => { t.bgImageFit = v === 'contain' ? 'contain' : 'cover'; });
+  $('#tHyph').addEventListener('change', (e) => {
+    for (const t of selectedTiles()) applyStyle(doc(), t, 'hyphens', (e.target as HTMLInputElement).checked);
+    commit();
+    render();
+  });
   bleed('#sBleed', scopeTargets);
   for (const seg of $$('.seg')) {
     seg.addEventListener('click', (e) => {
@@ -222,7 +269,7 @@ export function bindInspector(): void {
       resized();
     });
   }
-  for (const [sel, prop] of [['#pMargin', 'margin'], ['#pGutter', 'gutter'], ['#pCols', 'columns']] as const) {
+  for (const [sel, prop] of [['#pMargin', 'margin'], ['#pCols', 'columns']] as const) {
     $(sel).addEventListener('change', (e) => {
       const v = parseFloat((e.target as HTMLInputElement).value);
       if (Number.isNaN(v)) { render(); return; }

@@ -3,7 +3,7 @@
 
 import { EPS, MIN } from '../constants';
 import { makeTile } from '../model/tile';
-import { findTile, firstLeaf, innerGutter, insetOf, isSection, parentOf } from '../model/tree';
+import { findTile, firstLeaf, gapOf, innerGutter, insetOf, isSection, parentOf } from '../model/tree';
 import type { Doc, Point, Tile } from '../model/types';
 import { clone, uid } from '../util';
 import { AX, type Axis } from './axis';
@@ -37,16 +37,16 @@ export interface CutPlan {
 /** The tile edge under the pointer. Reaches `inner` mm into the tile and out
     into the gutter / margin beside it. */
 export function edgeAt(level: Level, pt: Point, inner: number, skipId: string | null): EdgeHit | null {
-  const P = level.frame, g = P.gutter;
+  const P = level.frame, gx = P.gutter, gy = P.gutterY;
   let best: EdgeHit | null = null;
   for (const t of level.tiles) {
     if (t.id === skipId) continue;
     const r = t.x + t.w, b = t.y + t.h;
     const sides: [Side, number, number, number, number, number][] = [
-      ['left', pt.x - t.x, pt.y, t.y, b, t.x <= P.margin + EPS ? t.x : g / 2],
-      ['right', r - pt.x, pt.y, t.y, b, r >= P.w - P.margin - EPS ? P.w - r : g / 2],
-      ['top', pt.y - t.y, pt.x, t.x, r, t.y <= P.margin + EPS ? t.y : g / 2],
-      ['bottom', b - pt.y, pt.x, t.x, r, b >= P.h - P.margin - EPS ? P.h - b : g / 2],
+      ['left', pt.x - t.x, pt.y, t.y, b, t.x <= P.margin + EPS ? t.x : gx / 2],
+      ['right', r - pt.x, pt.y, t.y, b, r >= P.w - P.margin - EPS ? P.w - r : gx / 2],
+      ['top', pt.y - t.y, pt.x, t.x, r, t.y <= P.margin + EPS ? t.y : gy / 2],
+      ['bottom', b - pt.y, pt.x, t.x, r, b >= P.h - P.margin - EPS ? P.h - b : gy / 2],
     ];
     for (const [side, d, q, q0, q1, outer] of sides) {
       if (q < q0 || q > q1 || d > inner || d < -Math.max(outer, EPS)) continue;
@@ -85,8 +85,9 @@ export interface CutOptions {
 export function cutPlan(doc: Doc, level: Level, edge: EdgeHit, o: CutOptions): CutPlan | null {
   const t = findTile(doc, edge.id);
   if (!t) return null;
-  const g = level.frame.gutter;
+  // cutting a header/footer divides what is inside it: its pieces are spaced like tiles inside a tile
   const ax: Axis = edge.side === 'left' || edge.side === 'right' ? 'y' : 'x';
+  const g = t.role ? innerGutter(doc, t, ax) : gapOf(level.frame, ax);
   const A = AX[ax];
   const range = (k: Tile) => [k[A.p] + MIN + g / 2, k[A.p] + k[A.l] - MIN - g / 2];
   const crossed = (cs: number[]) => {
@@ -136,7 +137,7 @@ export function cutPlan(doc: Doc, level: Level, edge: EdgeHit, o: CutOptions): C
 export function cutTile(doc: Doc, t: Tile, ax: Axis, cs: number[]): string[] {
   // the tile's own container (not necessarily the level being edited)
   const parent = parentOf(doc, t.id), list = parent ? parent.children! : doc.tiles;
-  const A = AX[ax], g = parent ? innerGutter(doc, parent) : doc.paper.gutter;
+  const A = AX[ax], g = parent ? innerGutter(doc, parent, ax) : gapOf(doc.paper, ax);
   const end = t[A.p] + t[A.l];
   const created: string[] = [];
   let at = list.indexOf(t);

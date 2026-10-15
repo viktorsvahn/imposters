@@ -1,23 +1,33 @@
 {
   "name": "imposters",
   "version": "0.1.0",
-  "description": "Imposters — (im)ages and (posters): a tile-based poster layout editor.",
+  "description": "Imposters — (im)ages and (posters): a project-based poster and figure editor.",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "app": "npm run build && node scripts/app.mjs",
+    "app:dev": "node scripts/app.mjs --dev",
     "build": "tsc --noEmit && vite build",
+    "build:electron": "tsc -p electron/tsconfig.json",
     "preview": "vite preview",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && tsc -p electron/tsconfig.json --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:e2e": "vite build && node --test tests/e2e/"
+    "test:e2e": "vite build && npm run build:electron && node --test --test-concurrency=1 \"tests/e2e/*.test.mjs\""
   },
   "devDependencies": {
+    "@types/node": "^24.19.2",
+    "electron": "^44.7.2",
     "puppeteer-core": "^23.6.0",
     "typescript": "^5.6.3",
     "vite": "^5.4.10",
     "vite-plugin-singlefile": "^2.0.3",
     "vitest": "^2.1.4"
+  },
+  "main": "dist-electron/main.js",
+  "dependencies": {
+    "vega": "^6.4.0",
+    "vega-lite": "^6.5.0"
   }
 }

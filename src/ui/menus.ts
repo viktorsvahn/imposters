@@ -1,6 +1,7 @@
 /* Drop-down menus of the formatting toolbar: colour (text / fill) and border.
    One menu is open at a time. */
 
+import { paletteById } from '../model/palettes';
 import { editor } from '../editor/store';
 import { ROLES, rememberColor } from '../model/design';
 import type { Tile } from '../model/types';
@@ -16,7 +17,8 @@ export function closeMenu(): void {
 }
 
 /** Show a menu element under a toolbar button. */
-function show(menu: HTMLElement, btn: HTMLElement, width: number): void {
+/** Show a menu under a toolbar button (one menu at a time). */
+export function showMenu(menu: HTMLElement, btn: HTMLElement, width: number): void {
   closeMenu();
   dom.fmtbar.appendChild(menu);
   const r = btn.getBoundingClientRect(), host = dom.fmtbar.getBoundingClientRect();
@@ -39,9 +41,10 @@ export function openColorMenu(btn: HTMLElement, kind: 'color' | 'fill', pick: (v
     `<button class="none" data-v="">${isFill ? 'No fill' : 'Automatic (text style)'}</button>` +
     (roles.length ? `<div class="cm-h">Design colours</div><div class="cm-roles">${roles.map((r) =>
       `<button class="role-sw" data-v="@${r.id}"><span style="background:${isFill ? d.colors[r.id].bg : d.colors[r.id].text}"></span>${r.label}</button>`).join('')}</div>` : '') +
+    `<div class="cm-h">Palette: ${paletteById(d.palette).name} (Paul Tol)</div><div class="cm-grid">${paletteById(d.palette).colors.map(swatch).join('')}</div>` +
     (d.recent.length ? `<div class="cm-h">Recent</div><div class="cm-grid">${d.recent.map(swatch).join('')}</div>` : '') +
     `<label class="cm-custom">Custom… <input type="color" value="${d.recent[0] || '#2a9d8f'}"></label>`;
-  show(menu, btn, 230);
+  showMenu(menu, btn, 230);
   const choose = (v: string) => {
     if (v && v[0] === '#') rememberColor(d, v);
     pick(v);
@@ -58,6 +61,8 @@ export function openColorMenu(btn: HTMLElement, kind: 'color' | 'fill', pick: (v
 /* ---- border menu: sides, width, colour, corners ---- */
 
 export interface BorderChange {
+  /** false: back to the design's border */
+  ownBorder?: boolean;
   borderW?: number;
   borderC?: string;
   borderSides?: string;
@@ -81,12 +86,14 @@ export function openBorderMenu(btn: HTMLElement, current: () => Tile | null, app
       ${colours.map((c) => `<button class="sw" data-c="${c}" title="${c}" style="background:${c}"></button>`).join('')}</div>
     <label class="cm-custom">Custom… <input type="color" class="bm-c"></label>
     <div class="cm-h">Corners (mm)</div><div class="bm-row">
-      ${[0, 2, 5, 10, 20].map((r) => `<button data-r="${r}">${r}</button>`).join('')}</div>`;
-  show(menu, btn, 250);
+      ${[0, 2, 5, 10, 20].map((r) => `<button data-r="${r}">${r}</button>`).join('')}</div>
+    <button class="none bm-design" data-design title="Follow the border set in the Design tab for this kind of tile">Use the design's border</button>`;
+  showMenu(menu, btn, 250);
 
   const sync = () => {
     const t = current();
     if (!t || open !== menu) return;
+    menu.querySelector('.bm-design')!.classList.toggle('on', !t.ownBorder);
     const on = t.borderW > 0, sides = on ? t.borderSides ?? 'trbl' : '';
     menu.querySelectorAll<HTMLElement>('[data-side]').forEach((b) => b.classList.toggle('on', sides.includes(b.dataset.side!)));
     menu.querySelector('[data-sides="trbl"]')!.classList.toggle('on', sides.length === 4);
@@ -103,7 +110,8 @@ export function openBorderMenu(btn: HTMLElement, current: () => Tile | null, app
     const t = current();
     if (!b || !t) return;
     const ds = b.dataset;
-    if (ds.sides !== undefined) change(ds.sides ? { borderSides: ds.sides } : { borderW: 0 });
+    if (ds.design !== undefined) change({ ownBorder: false });
+    else if (ds.sides !== undefined) change(ds.sides ? { borderSides: ds.sides } : { borderW: 0 });
     else if (ds.side) {
       let sides = t.borderW > 0 ? t.borderSides ?? 'trbl' : '';
       sides = sides.includes(ds.side) ? sides.replace(ds.side, '') : sides + ds.side;

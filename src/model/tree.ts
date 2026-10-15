@@ -1,7 +1,7 @@
 /* The tile tree. Tiles may hold child tiles (`children`), positioned relative
    to their parent. These helpers search and measure it. */
 
-import type { Doc, Point, Tile } from './types';
+import type { Doc, Point, Tile, Frame } from './types';
 
 export function walk(list: Tile[], fn: (t: Tile, parent: Tile | null) => void, parent: Tile | null = null): void {
   for (const t of list) {
@@ -35,7 +35,13 @@ export const isSection = (t: Tile | null | undefined): t is Tile & { children: T
 
 export const insetOf = (t: Tile): number => t.inset ?? 0;
 
-export const innerGutter = (doc: Doc, t: Tile): number => t.gutter ?? doc.paper.gutter;
+/** Space between the tiles inside a tile, across ('x': side by side) or down ('y'): its own, else the
+    design's (smaller than the poster's gutter). */
+export const innerGutter = (doc: Doc, t: Tile, ax: 'x' | 'y' = 'x'): number =>
+  ax === 'x' ? t.gutter ?? doc.design?.localGutter ?? 0 : t.gutterY ?? doc.design?.localGutterY ?? 0;
+
+/** A frame's gap between tiles along an axis: across ('x') or down ('y'). */
+export const gapOf = (f: Frame, ax: 'x' | 'y'): number => (ax === 'x' ? f.gutter : f.gutterY);
 
 /** Absolute position (on the paper) of a tile's top-left corner. */
 export function originOf(doc: Doc, t: Tile | null): Point {

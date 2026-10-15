@@ -1,7 +1,7 @@
 /* The main toolbar: breadcrumbs, commands, Parts, zoom, panel toggle. */
 
 import { act, type Command } from '../commands';
-import { exitTo, setParts } from '../editor/actions';
+import { exitTo, mergeMode, setParts, splitsInside } from '../editor/actions';
 import { canRedo, canUndo } from '../editor/history';
 import { loadPrefs, savePrefs } from '../editor/prefs';
 import { editor, scopeTile } from '../editor/store';
@@ -25,6 +25,17 @@ export function updateToolbar(): void {
   $$<HTMLButtonElement>('[data-act=up]').forEach((b) => { b.disabled = !view.scope; });
   const n = view.selected.size;
   $$<HTMLButtonElement>('[data-needs]').forEach((b) => { b.disabled = n < +b.dataset.needs!; });
+  // Merge: two or more selected tiles
+  const mm = mergeMode(), mb = $<HTMLButtonElement>('[data-act=merge]');
+  mb.disabled = !mm;
+  mb.title = 'Merge the selected tiles into one tile, with them inside it (M) — Shift-click to select several';
+  // inside a tile with nothing selected, Split divides that tile's inside
+  const inside = splitsInside();
+  $$<HTMLButtonElement>('[data-act=split-v], [data-act=split-h]').forEach((b) => {
+    if (inside) b.disabled = false;
+    const what = inside ? 'the inside of this tile' : 'the selected tile';
+    b.title = `Split ${what} into ${b.dataset.act === 'split-v' ? 'columns (V)' : 'rows (H)'}`;
+  });
   $<HTMLButtonElement>('[data-act=undo]').disabled = !canUndo();
   $<HTMLButtonElement>('[data-act=redo]').disabled = !canRedo();
   $('#zoomLabel').textContent = Math.round(view.zoom * 100) + '%';

@@ -35,8 +35,18 @@ export type Drag =
   | (DragBase & { mode: 'free'; rect: Rect })
   | (DragBase & {
       mode: 'seam'; seam: Seam; origs: Map<string, { p: number; l: number }>; minDelta: number; maxDelta: number;
+      /** every tile of the level as it was (Ctrl+Alt opens space, also between all of them) */
+      level: Map<string, { p: number; l: number }>;
+      /** the seam moved last (it springs back within minDelta…maxDelta on release) */
+      delta?: number;
     })
-  | (DragBase & { mode: 'resize'; handle: Handle; id: string; orig: Rect })
+  | (DragBase & {
+      mode: 'resize'; handle: Handle; id: string; orig: Rect;
+      /** tiles under a header that follow its bottom edge (their own bottom stays), and their minimum heights */
+      below?: Map<string, { y: number; h: number; min: number }>;
+      /** the smallest size the tile's content allows */
+      min: { w: number; h: number };
+    })
   | (DragBase & {
       mode: 'move'; origs: Map<string, { x: number; y: number }>; bbox: Rect; clickedId: string;
       shift: boolean; at: { clientX: number; clientY: number }; deepId: string;

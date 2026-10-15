@@ -1,15 +1,16 @@
 /* Document commands: each changes the document / selection for the current
    level, records a history step and redraws. UI code calls these. */
 
-import { MIN } from '../constants';
+import { EPS, MIN } from '../constants';
 import { AX } from '../layout/axis';
 import { toggleBand } from '../layout/bands';
 import { makeContainer, unwrapIfTrivial } from '../layout/containers';
 import { applyCutPlan, cutAny, equalCuts, type CutPlan } from '../layout/cuts';
 import { fillAll, fillTile, largestFree } from '../layout/fill';
 import { setLevelTiles } from '../layout/level';
+import { reflowAxis } from '../layout/reflow';
 import { makeTile } from '../model/tile';
-import { isSection, parentOf, reid } from '../model/tree';
+import { gapOf, isSection, parentOf, reid } from '../model/tree';
 import type { BandRole, Tile, TileType } from '../model/types';
 import { clone, uid } from '../util';
 import { commit } from './history';
@@ -54,10 +55,24 @@ export function placeTile(rect: { x: number; y: number; w: number; h: number }):
 }
 
 /** Split the selected tiles into equal parts (columns or rows). */
+/** Inside a tile with nothing selected, Split divides the inside: its one tile, or its empty space. */
+export function splitsInside(): boolean {
+  return !!editor.view.scope && !selectedTiles().length && level().tiles.filter((t) => !t.role).length <= 1;
+}
+
 export function splitSelected(vertical: boolean): void {
-  const ax = vertical ? 'x' : 'y', g = level().frame.gutter;
+  const ax = vertical ? 'x' : 'y', g = gapOf(level().frame, ax);
   const created: string[] = [];
-  for (const t of selectedTiles()) {
+  let targets = selectedTiles();
+  if (!targets.length && splitsInside()) {
+    const L = level(), inside = L.tiles.filter((t) => !t.role);
+    if (inside.length) targets = inside;
+    else {
+      const free = largestFree(L);
+      if (free) { const t = newTileHere('text', { x: free.x, y: free.y, w: free.w, h: free.h }); L.tiles.push(t); targets = [t]; }
+    }
+  }
+  for (const t of targets) {
     const cs = equalCuts(t, ax, editor.view.parts, g);
     if (cs) created.push(...cutAny(editor.doc, t, ax, cs));
   }
@@ -98,6 +113,36 @@ export function duplicateSelected(): void {
   done();
 }
 
+/** What Merge would do: group the selected tiles (null: fewer than two selected). */
+export function mergeMode(): 'tiles' | null {
+  return selectedTiles().length > 1 ? 'tiles' : null;
+}
+
+/** Merge the selected tiles: one tile covering them all, with them inside it as its tiles — their contents
+    and divisions kept, spaced by the (smaller) gutter of tiles inside tiles. Merging the pieces of a
+    split makes the tile whole again. Refused when another tile lies in between, or for headers/footers. */
+export function mergeSelected(): void {
+  if (editor.view.editing) hooks.stopEditing(); // what is being typed goes along
+  const L = level(), ts = selectedTiles();
+  if (ts.length < 2) return;
+  if (ts.some((t) => t.role || t.inBand)) { notify('Headers and footers can\'t be merged with other tiles'); return; }
+  const x0 = Math.min(...ts.map((t) => t.x)), y0 = Math.min(...ts.map((t) => t.y));
+  const x1 = Math.max(...ts.map((t) => t.x + t.w)), y1 = Math.max(...ts.map((t) => t.y + t.h));
+  const inTheWay = L.tiles.some((t) => !ts.includes(t) && t.x < x1 - EPS && t.x + t.w > x0 + EPS && t.y < y1 - EPS && t.y + t.h > y0 + EPS);
+  if (inTheWay) { notify('Another tile is in the way: merge tiles that lie side by side'); return; }
+
+  const w = x1 - x0, h = y1 - y0, d = editor.doc.design;
+  const kids = L.tiles.filter((t) => ts.includes(t)); // in their drawing order
+  for (const k of kids) { k.x -= x0; k.y -= y0; delete k.inBand; }
+  reflowAxis(kids, AX.x, { size: w, m: 0, g: L.frame.gutter }, { size: w, m: 0, g: d.localGutter });
+  reflowAxis(kids, AX.y, { size: h, m: 0, g: L.frame.gutterY }, { size: h, m: 0, g: d.localGutterY });
+  const box = newTileHere('text', { x: x0, y: y0, w, h, bg: '', html: '', children: kids, lw: null });
+  const at = L.tiles.indexOf(kids[0]);
+  setLevelTiles(editor.doc, L, [...L.tiles.slice(0, at).filter((t) => !ts.includes(t)), box, ...L.tiles.slice(at).filter((t) => !ts.includes(t))]);
+  select(box.id);
+  done();
+}
+
 export function deleteSelected(): void {
   const L = level(), sel = editor.view.selected;
   setLevelTiles(editor.doc, L, L.tiles.filter((t) => !sel.has(t.id)));
@@ -118,7 +163,7 @@ export type ArrangeKind = 'left' | 'right' | 'top' | 'bottom' | 'matchW' | 'matc
 export function arrangeSelected(kind: ArrangeKind): void {
   const ts = selectedTiles();
   if (!ts.length) return;
-  const g = level().frame.gutter;
+  const f = level().frame;
   const minX = Math.min(...ts.map((t) => t.x)), maxR = Math.max(...ts.map((t) => t.x + t.w));
   const minY = Math.min(...ts.map((t) => t.y)), maxB = Math.max(...ts.map((t) => t.y + t.h));
   switch (kind) {
@@ -130,7 +175,7 @@ export function arrangeSelected(kind: ArrangeKind): void {
     case 'matchH': ts.forEach((t) => { t.h = ts[0].h; }); break;
     case 'evenW':
     case 'evenH': {
-      const A = AX[kind === 'evenW' ? 'x' : 'y'];
+      const A = AX[kind === 'evenW' ? 'x' : 'y'], g = gapOf(f, kind === 'evenW' ? 'x' : 'y');
       const lo = kind === 'evenW' ? minX : minY, hi = kind === 'evenW' ? maxR : maxB;
       const len = (hi - lo - (ts.length - 1) * g) / ts.length;
       if (len < MIN) { notify('Not enough room'); return; }
@@ -192,6 +237,6 @@ export function setBand(c: Tile | null, role: BandRole, on: boolean): void {
 
 export function setTileImage(t: Tile, src: string): void {
   if (isSection(t)) return;
-  if (t.type !== 'image') { t.type = 'image'; t.padding = 0; }
+  if (t.type !== 'image') { t.type = 'image'; t.padX = t.padY = 0; }
   t.src = src;
 }

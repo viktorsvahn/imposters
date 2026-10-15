@@ -9,7 +9,7 @@ export type Direction = 'left' | 'right' | 'up' | 'down';
 
 /** Grow a tile in one direction until it meets a neighbour (minus gutter) or the margin. */
 export function expand(level: Level, t: Tile, dir: Direction): void {
-  const p = level.frame, g = p.gutter, m = p.margin;
+  const p = level.frame, m = p.margin, g = dir === 'left' || dir === 'right' ? p.gutter : p.gutterY;
   const others = level.tiles.filter((o) => o !== t);
   const rowMates = others.filter((o) => overlaps(o.y, o.y + o.h, t.y, t.y + t.h));
   const colMates = others.filter((o) => overlaps(o.x, o.x + o.w, t.x, t.x + t.w));
@@ -47,17 +47,17 @@ export function fillAll(level: Level): void {
     margin or a tile edge + gutter, so we try every such pair and sweep the
     blocked vertical intervals for gaps. */
 export function largestFree(level: Level, at: Point | null = null): (Rect & { area: number }) | null {
-  const { w: W, h: H, margin: m, gutter: g } = level.frame;
+  const { w: W, h: H, margin: m, gutter: gx, gutterY: gy } = level.frame;
   const ts = level.tiles;
-  const Ls = [m, ...ts.map((t) => t.x + t.w + g)];
-  const Rs = [W - m, ...ts.map((t) => t.x - g)];
+  const Ls = [m, ...ts.map((t) => t.x + t.w + gx)];
+  const Rs = [W - m, ...ts.map((t) => t.x - gx)];
   let best: (Rect & { area: number }) | null = null;
   for (const l of Ls) {
     for (const r of Rs) {
       if (r - l < MIN || l < m - EPS || r > W - m + EPS) continue;
       if (at && (at.x < l || at.x > r)) continue;
       const blocked = ts.filter((t) => t.x < r - EPS && t.x + t.w > l + EPS)
-        .map((t) => [t.y - g, t.y + t.h + g])
+        .map((t) => [t.y - gy, t.y + t.h + gy])
         .sort((a, b) => a[0] - b[0]);
       let cur = m;
       const gaps: [number, number][] = [];

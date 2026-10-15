@@ -1,7 +1,10 @@
+@import './fonts.css';
 @import './base.css';
 @import './toolbar.css';
 @import './formatbar.css';
 @import './inspector.css';
 @import './paper.css';
 @import './tiles.css';
+@import './project.css';
+@import './sidebar.css';
 @import './print.css';

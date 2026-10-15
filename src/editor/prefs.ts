@@ -9,9 +9,14 @@ export interface Prefs {
   spell: boolean;
   /** show the settings panel */
   panel: boolean;
+  /** the open sidebar tab ('' = folded away) */
+  side: string;
+  /** the live view (the poster as published) is shown, and its width (px) */
+  live: boolean;
+  liveWidth: number;
 }
 
-const DEFAULTS: Prefs = { overflow: false, spell: false, panel: false };
+const DEFAULTS: Prefs = { overflow: false, spell: false, panel: false, side: 'posters', live: false, liveWidth: 560 };
 
 export function loadPrefs(): Prefs {
   try {

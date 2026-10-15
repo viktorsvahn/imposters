@@ -2,11 +2,13 @@
 
 @media print {
   html, body { height: auto; overflow: visible; background: none; display: block; }
-  .toolbar, .fmtbar, .inspector, #scopeLayer, .hint, .handle, .toast { display: none !important; }
+  .toolbar, .fmtbar, .inspector, #scopeLayer, .hint, .handle, .toast, .welcome, .popmenu,
+  .activity, .side-panel, .data-editor, .plot-editor, .plot-tip, .live-view, .live-split { display: none !important; }
   main, .stage { display: block; overflow: visible; }
   .sizer { width: auto !important; height: auto !important; margin: 0; }
   .paper { position: relative; left: 0 !important; top: 0 !important; transform: none !important; box-shadow: none; }
   .tile { outline: none !important; box-shadow: none !important; }
+  .tile.nofill { background-color: transparent !important; }
   .paper.scoped .tile.live::after { display: none; }
   .tile > .content:empty::before, .tile .placeholder { visibility: hidden; }
   * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }

@@ -10,7 +10,8 @@
 /* the current level's overlays */
 #scopeLayer { position: absolute; pointer-events: none; z-index: 20; }
 #guides, #hover, #mask { position: absolute; inset: 0; pointer-events: none; }
-#mask { display: none; box-shadow: 0 0 0 100000px rgba(225, 229, 236, .72); }
+/* inside a tile: everything outside it is greyed out */
+#mask { display: none; box-shadow: 0 0 0 100000px rgba(196, 202, 214, .8); }
 .paper.scoped #mask { display: block; }
 
 .grid { position: absolute; inset: 0; pointer-events: none; }
@@ -52,3 +53,18 @@
 .paper.seam-x, .paper.seam-x * { cursor: col-resize !important; }
 .paper.seam-y, .paper.seam-y * { cursor: row-resize !important; }
 .paper.on-plus, .paper.on-plus * { cursor: copy !important; }
+
+/* the master poster (Design): a specimen poster to click on */
+.master { flex: 1; display: flex; flex-direction: column; min-width: 0; background: var(--ui-bg, #e9ebef); }
+.master[hidden] { display: none; }
+body.master-open .stage { display: none; }
+.master-bar { display: flex; align-items: center; gap: 12px; padding: 8px 14px; border-bottom: 1px solid var(--ui-line, #d6d9df); background: var(--ui-panel, #fff); }
+.master-bar .muted { flex: 1; }
+.master-stage { flex: 1; overflow: auto; display: flex; align-items: center; justify-content: center; padding: 24px; }
+.master-sizer { position: relative; flex: none; }
+.master-paper { left: 0; top: 0; cursor: pointer; }
+.master-paper .tile.nofill { background-color: transparent !important; } /* as printed */
+.master-paper .tile:not(.section) { box-shadow: 0 0 0 calc(1px * var(--inv)) rgba(47, 111, 237, .18); }
+.master-paper .tile:hover { outline: calc(1px * var(--inv)) solid rgba(47, 111, 237, .6); }
+.master-paper .master-pick { outline: calc(3px * var(--inv)) solid var(--accent) !important; outline-offset: calc(2px * var(--inv)); }
+.master-paper.master-pick-paper { outline: calc(4px * var(--inv)) solid var(--accent); outline-offset: calc(4px * var(--inv)); }

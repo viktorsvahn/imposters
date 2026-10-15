@@ -2,6 +2,7 @@
    container, full width, bleeding past its margin. Their colour belongs to
    the zone: cutting one divides its contents instead. */
 
+import { headerHtml, HEADER_STYLES, styleById } from '../model/design';
 import { makeTile } from '../model/tile';
 import { innerGutter, insetOf, originOf, parentOf } from '../model/tree';
 import type { BandRole, Doc, Frame, Tile } from '../model/types';
@@ -14,8 +15,8 @@ import { reflowAxis } from './reflow';
 export function containerFrame(doc: Doc, c: Tile | null) {
   const P = doc.paper;
   return c
-    ? { list: (c.children ||= []), w: c.w, h: c.h, m: insetOf(c), g: innerGutter(doc, c) }
-    : { list: doc.tiles, w: P.w, h: P.h, m: P.margin, g: P.gutter };
+    ? { list: (c.children ||= []), w: c.w, h: c.h, m: insetOf(c), g: innerGutter(doc, c, 'y') }
+    : { list: doc.tiles, w: P.w, h: P.h, m: P.margin, g: P.gutterY }; // headers and footers stack: the gap down
 }
 
 export function bandOf(doc: Doc, c: Tile | null, role: BandRole): Tile | null {
@@ -35,13 +36,17 @@ export function toggleBand(doc: Doc, c: Tile | null, role: BandRole, on: boolean
   const top = role === 'header';
   if (on) {
     // the band sits on the top/bottom edge itself (no top/bottom margin)
-    const hh = Math.max(12, round((hi - lo) * (top ? 0.12 : 0.08)));
+    const fit = top ? headerHeight(doc, c ? 'tile' : 'poster', doc.design.space.header.y) : 0;
+    // a tile's header fits its title and subtitle; the poster's banner gets at least an eighth of the paper
+    const hh = Math.min(round((hi - lo) * 0.5), c && top ? fit : Math.max(12, round((hi - lo) * (top ? 0.12 : 0.08)), fit));
     reflowAxis(others, AX.y, { lo, hi, g }, { lo: top ? Math.max(lo, hh + g) : lo, hi: top ? hi : Math.min(hi, f.h - hh - g), g });
     // coloured by the design's (tile) header/footer role — none by default inside tiles
     const colour = c ? (top ? '@tileHeader' : '@tileFooter') : '@' + role;
     const t = makeTile(doc.paper, 'text', {
       role, bleed: true, x: f.m, w: f.w - 2 * f.m, y: top ? 0 : f.h - hh, h: hh,
       bg: colour, color: colour, vAlign: 'middle',
+      // a header starts with a title and a subtitle (the banner centred)
+      html: top ? headerHtml(c ? 'tile' : 'poster') : '', align: top && !c ? 'center' : 'left',
     });
     if (top) list.unshift(t); else list.push(t);
     return t;
@@ -50,6 +55,15 @@ export function toggleBand(doc: Doc, c: Tile | null, role: BandRole, on: boolean
   const was = top ? { lo: band!.y + band!.h + g, hi } : { lo, hi: band!.y - g };
   reflowAxis(others, AX.y, { ...was, g }, { lo, hi, g });
   return null;
+}
+
+const MM_PER_PT = 25.4 / 72;
+
+/** Height (mm) a new header needs for its title and subtitle, at their styles' sizes. */
+export function headerHeight(doc: Doc, kind: 'poster' | 'tile', padding: number): number {
+  const [t, s] = HEADER_STYLES[kind].map((id) => styleById(doc.design, id)?.size ?? 24);
+  const rows = kind === 'tile' && doc.design.tileSubtitle === 'beside' ? Math.max(t, s) : t + s;
+  return round(rows * MM_PER_PT * 1.3 + 2 * padding);
 }
 
 /** The header/footer a tile is, or sits in (null elsewhere). */

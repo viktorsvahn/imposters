@@ -14,7 +14,7 @@ export interface Level {
 
 export function frameOf(doc: Doc, c: Tile | null): Frame {
   if (!c) return doc.paper;
-  return { w: c.w, h: c.h, margin: c.inset || 0, gutter: innerGutter(doc, c), columns: 0 };
+  return { w: c.w, h: c.h, margin: c.inset || 0, gutter: innerGutter(doc, c, 'x'), gutterY: innerGutter(doc, c, 'y'), columns: 0 };
 }
 
 export function levelOf(doc: Doc, containerId: string | null): Level {

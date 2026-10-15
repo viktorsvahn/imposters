@@ -12,18 +12,78 @@ import {
   applyBlockStyle, blockOf, editingContent, selectedBlocks, selectParagraphIfCollapsed, stopEditing,
 } from '../interaction/editing';
 import { bandOf } from '../layout/bands';
-import { FONT_LIST, FONTS, offeredStyles, resolveBg, resolveText, styleById } from '../model/design';
+import { borderOf, fontCss, fontIdOfCss, offeredStyles, resolveBg, resolveText, styleById } from '../model/design';
 import { applyStyle, lookOf } from '../model/style';
 import { parentOf } from '../model/tree';
 import type { BandRole, Tile } from '../model/types';
 import { $, dom } from '../view/dom';
+import { localFamilies, fontOptions } from '../view/fonts';
 import { tileEl, updateTileEl } from '../view/paper';
 import { icons } from './icons';
+import { openTableMenu } from './table';
 import { closeMenu, menuOpen, openBorderMenu, openColorMenu, type BorderChange } from './menus';
 
-export const fontOptions = (withDefault: boolean): string =>
-  (withDefault ? '<option value="">Default font</option>' : '') +
-  FONT_LIST.map((f) => `<option value="${f.id}">${f.label}</option>`).join('');
+export { fontOptions } from '../view/fonts';
+
+/* ---- formatting something other than tiles (a text in a plot) ---- */
+
+export type TargetAction = 'bold' | 'italic' | 'align' | 'size' | 'font' | 'color';
+
+/** A text the toolbar can format instead of tiles. */
+export interface FormatTarget {
+  /** font: an id from FONT_LIST ('' = default); size in pt; colour as #hex */
+  state(): { font: string; size: number; bold: boolean; italic: boolean; align: string; color: string };
+  /** font: CSS family ('' = default); colour: #hex ('' = default) */
+  apply(what: TargetAction, value?: string | number): void;
+}
+
+/** null: the poster's tiles; 'off': nothing to format (an editor covers the poster); else that text. */
+let target: FormatTarget | 'off' | null = null;
+
+export function setFormatTarget(t: FormatTarget | 'off' | null): void {
+  target = t;
+  updateFormatBar();
+}
+
+/** Toolbar controls that work on a plot text. */
+const TARGET_CONTROLS = new Set(['fFont', 'fSize', 'size-up', 'size-down', 'bold', 'italic', 'color', 'align-left', 'align-center', 'align-right']);
+
+function updateForTarget(t: FormatTarget | 'off'): void {
+  const bar = dom.fmtbar;
+  bar.classList.toggle('inactive', t === 'off');
+  bar.querySelectorAll<HTMLButtonElement | HTMLInputElement>('[data-f], [data-b]').forEach((el) => {
+    const key = el.dataset.f === 'sel' ? el.id : el.dataset.f ?? '';
+    el.disabled = t === 'off' || !TARGET_CONTROLS.has(key);
+  });
+  bar.querySelectorAll('.on').forEach((el) => el.classList.remove('on'));
+  if (t === 'off') return;
+  const s = t.state();
+  const setv = (id: string, v: string | number) => {
+    const el = $<HTMLInputElement>(id);
+    if (document.activeElement !== el) el.value = String(v);
+  };
+  setv('#fFont', s.font);
+  setv('#fSize', Math.round(s.size * 2) / 2);
+  const on = (id: string, v: unknown) => bar.querySelector(`[data-f="${id}"]`)!.classList.toggle('on', !!v);
+  on('bold', s.bold);
+  on('italic', s.italic);
+  for (const a of ['left', 'center', 'right']) on('align-' + a, s.align === a);
+  $('#fColor').style.setProperty('--sw', s.color);
+}
+
+/** A toolbar control used on the target text. */
+function applyToTarget(t: FormatTarget, f: string, b?: HTMLElement): void {
+  if (f === 'color') {
+    if (menuOpen()) { closeMenu(); return; }
+    openColorMenu(b!, 'color', (v) => t.apply('color', resolveText(editor.doc.design, v)));
+  } else if (f.startsWith('align-')) t.apply('align', f.slice(6));
+  else if (f === 'bold' || f === 'italic') t.apply(f);
+  else if (f === 'size-up' || f === 'size-down') {
+    const cur = t.state().size;
+    t.apply('size', f === 'size-up' ? SIZE_STEPS.find((s) => s > cur) || cur + 12 : [...SIZE_STEPS].reverse().find((s) => s < cur) || Math.max(4, cur - 2));
+  }
+  updateFormatBar();
+}
 
 /* ---- markup ---- */
 
@@ -39,7 +99,8 @@ function markup(): string {
     '<select id="fFont" data-f="sel" title="Font"></select>',
     `<span class="fsize">${btn('size-down', 'Smaller', 'A−')}<input id="fSize" data-f="sel" type="number" min="4" step="1" title="Size (pt)">${btn('size-up', 'Larger', 'A+')}</span>`,
     sep,
-    btn('bold', 'Bold (Ctrl+B)', '<b>B</b>') + btn('italic', 'Italic (Ctrl+I)', '<i>I</i>') + btn('underline', 'Underline (Ctrl+U)', '<u>U</u>'),
+    btn('bold', 'Bold (Ctrl+B)', '<b>B</b>') + btn('italic', 'Italic (Ctrl+I)', '<i>I</i>') + btn('underline', 'Underline (Ctrl+U)', '<u>U</u>') +
+      btn('sup', 'Superscript (while typing): ¹ ² ³, cm²', 'x<sup>2</sup>', ' data-edit-only') + btn('sub', 'Subscript (while typing): H₂O, N<sub>mols</sub>', 'x<sub>2</sub>', ' data-edit-only'),
     '<button data-f="color" id="fColor" class="swbtn" title="Text colour">A</button>',
     `<button data-f="fill" id="fFill" class="swbtn fill" title="Tile fill">${icons.fill}</button>`,
     sep,
@@ -49,7 +110,8 @@ function markup(): string {
     btn('valign-top', 'Text at the top of the tile', icons.valignTop) + btn('valign-middle', 'Text at the middle of the tile', icons.valignMiddle) +
       btn('valign-bottom', 'Text at the bottom of the tile', icons.valignBottom),
     sep,
-    btn('ul', 'Bulleted list (while typing)', icons.bullets, ' data-edit-only') + btn('ol', 'Numbered list (while typing)', icons.numbers, ' data-edit-only'),
+    btn('ul', 'Bulleted list (while typing)', icons.bullets, ' data-edit-only') + btn('ol', 'Numbered list (while typing)', icons.numbers, ' data-edit-only') +
+      btn('table', 'Table (while typing): insert one, or a copy of a Data table; add and delete rows and columns', icons.data, ' data-edit-only'),
     sep,
     '<label title="Line spacing">↕<select id="fLine" data-f="sel"><option value="">Auto</option><option>1</option><option>1.15</option><option>1.25</option><option>1.5</option><option>2</option></select></label>',
     '<label title="Space after each paragraph">¶<select id="fSpace" data-f="sel"><option value="">Auto</option><option value="0">None</option><option value="0.25">Small</option><option value="0.5">Medium</option><option value="1">Large</option></select></label>',
@@ -112,7 +174,7 @@ function setInlineSize(c: HTMLElement, pt: number): void {
 
 /* ---- applying ---- */
 
-type TextAction = 'style' | 'font' | 'size' | 'color' | 'align' | 'list' | 'clear' | 'bold' | 'italic' | 'underline';
+type TextAction = 'style' | 'font' | 'size' | 'color' | 'align' | 'list' | 'clear' | 'bold' | 'italic' | 'underline' | 'sup' | 'sub';
 
 /** Text-level actions: on the text while typing, on the tiles otherwise. */
 function fmtText(action: TextAction, value?: string | number): void {
@@ -124,9 +186,10 @@ function fmtText(action: TextAction, value?: string | number): void {
     else if (action === 'list') exec(value === 'ol' ? 'insertOrderedList' : 'insertUnorderedList');
     else if (action === 'clear') { selectParagraphIfCollapsed(c); exec('removeFormat'); }
     else if (action === 'bold' || action === 'italic' || action === 'underline') exec(action);
+    else if (action === 'sup' || action === 'sub') exec(action === 'sup' ? 'superscript' : 'subscript');
     else {
       selectParagraphIfCollapsed(c);
-      if (action === 'font') exec('fontName', value ? FONTS[value] : FONTS[styleById(doc.design, 'body')!.font]);
+      if (action === 'font') exec('fontName', fontCss(String(value || styleById(doc.design, 'body')!.font)));
       if (action === 'size') setInlineSize(c, Number(value));
       if (action === 'color') exec('foreColor', resolveText(doc.design, String(value)) || '#1a1a1a');
     }
@@ -173,15 +236,24 @@ function fmtTile(prop: keyof Tile, value: unknown): void {
   updateFormatBar();
 }
 
+/** What Border acts on: the tile being typed in, the selected tiles, else the tile you are inside. */
 const borderTargets = (): Tile[] => {
   const editing = tileById(editor.view.editing);
-  return editing ? [editing] : selectedTiles();
+  if (editing) return [editing];
+  const sel = selectedTiles(), inside = scopeTile();
+  return sel.length ? sel : inside ? [inside] : [];
 };
 
 function setBorder(change: BorderChange): void {
   const ts = borderTargets();
   if (!ts.length) return;
   for (const t of ts) {
+    if (change.ownBorder === false) { t.ownBorder = false; continue; }
+    if (!t.ownBorder) {
+      // from the design's border to its own: start from what it shows
+      const bd = borderOf(editor.doc.design, t, parentOf(editor.doc, t.id));
+      Object.assign(t, { ownBorder: true, borderW: bd.w, borderC: bd.c, borderSides: bd.sides, radius: bd.radius });
+    }
     Object.assign(t, change);
     // choosing sides or a colour on a tile without a border gives it one
     if (change.borderW === undefined && !(t.borderW > 0) && (change.borderSides || change.borderC)) t.borderW = 0.5;
@@ -223,7 +295,9 @@ function toggleBandButton(role: BandRole): void {
 /* ---- reflecting the current state ---- */
 
 export function updateFormatBar(): void {
+  if (target) { updateForTarget(target); return; }
   const bar = dom.fmtbar;
+  bar.querySelectorAll<HTMLButtonElement>('[data-b]').forEach((el) => { el.disabled = false; });
   const doc = editor.doc, c = editingContent(), ts = selectedTiles();
   const active = !!c || ts.length > 0;
   bar.classList.toggle('inactive', !active);
@@ -268,15 +342,15 @@ export function updateFormatBar(): void {
   };
 
   setv('#fStyle', block?.dataset.ts || look.ts || 'body');
-  const first = (css: string) => css.split(',')[0].replace(/["']/g, '').trim().toLowerCase();
-  const fam = cs ? first(cs.fontFamily) : '';
-  const font = FONT_LIST.find((f) => first(f.css) === fam);
-  setv('#fFont', c ? (font ? font.id : '') : look.font || '');
+  const font = cs ? fontIdOfCss(cs.fontFamily, localFamilies()) : null;
+  setv('#fFont', c ? font ?? '' : look.font || '');
   setv('#fSize', cs ? Math.round(parseFloat(cs.fontSize) * 0.75 * 2) / 2 : '');
   const on = (id: string, v: unknown) => bar.querySelector(`[data-f="${id}"]`)!.classList.toggle('on', !!v);
   on('bold', c ? document.queryCommandState('bold') : look.bold || (cs && +cs.fontWeight >= 600));
   on('italic', c ? document.queryCommandState('italic') : look.italic || (cs && cs.fontStyle === 'italic'));
   on('underline', c ? document.queryCommandState('underline') : look.underline);
+  on('sup', !!c && document.queryCommandState('superscript'));
+  on('sub', !!c && document.queryCommandState('subscript'));
   const align = cs ? cs.textAlign.replace('start', 'left') : '';
   for (const a of ['left', 'center', 'right', 'justify']) on('align-' + a, align === a);
   for (const v of ['top', 'middle', 'bottom']) on('valign-' + v, (t.vAlign || 'top') === v);
@@ -295,6 +369,7 @@ export function bindFormatBar(): void {
   const bar = dom.fmtbar;
   bar.innerHTML = markup();
   $('#fFont').innerHTML = fontOptions(true);
+  $('#fFont').dataset.fontPicker = '';
 
   // remember the caret / selection while typing, so the toolbar can restore it
   document.addEventListener('selectionchange', () => {
@@ -311,8 +386,13 @@ export function bindFormatBar(): void {
     if (t.closest('button') && !t.closest('.colormenu')) e.preventDefault();
   });
   bar.addEventListener('click', (e) => {
-    const target = e.target as Element;
-    const bb = target.closest<HTMLButtonElement>('button[data-b]');
+    const el = e.target as Element;
+    if (target) {
+      const tb = el.closest<HTMLButtonElement>('button[data-f]');
+      if (target !== 'off' && tb && !tb.disabled) applyToTarget(target, tb.dataset.f!, tb);
+      return;
+    }
+    const bb = el.closest<HTMLButtonElement>('button[data-b]');
     if (bb && !bb.disabled) {
       const what = bb.dataset.b!;
       if (what === 'border') {
@@ -321,9 +401,14 @@ export function bindFormatBar(): void {
       else toggleBandButton(what as BandRole);
       return;
     }
-    const b = target.closest<HTMLButtonElement>('button[data-f]');
+    const b = el.closest<HTMLButtonElement>('button[data-f]');
     if (!b || b.disabled) return;
     const f = b.dataset.f!;
+    if (f === 'table') {
+      if (menuOpen()) { closeMenu(); return; }
+      openTableMenu(b, restoreRange, () => { keepRange(); updateFormatBar(); });
+      return;
+    }
     if (f === 'color' || f === 'fill') {
       if (menuOpen()) { closeMenu(); return; }
       openColorMenu(b, f, (v) => (f === 'fill' ? fmtTile('bg', v) : fmtText('color', v)));
@@ -341,10 +426,18 @@ export function bindFormatBar(): void {
     } else fmtText(f as TextAction);
   });
   const onChange = (id: string, fn: (v: string) => void) =>
-    $(id).addEventListener('change', (e) => fn((e.target as HTMLInputElement).value));
+    $(id).addEventListener('change', (e) => { if (!target) fn((e.target as HTMLInputElement).value); });
   onChange('#fStyle', (v) => fmtText('style', v));
   onChange('#fFont', (v) => fmtText('font', v));
   onChange('#fSize', (v) => { const n = parseFloat(v); if (n > 0) fmtText('size', n); });
+  // a plot text: font and size
+  $('#fFont').addEventListener('change', (e) => {
+    if (target && target !== 'off') { const id = (e.target as HTMLSelectElement).value; target.apply('font', fontCss(id)); updateFormatBar(); }
+  });
+  $('#fSize').addEventListener('change', (e) => {
+    const n = parseFloat((e.target as HTMLInputElement).value);
+    if (target && target !== 'off' && n > 0) { target.apply('size', n); updateFormatBar(); }
+  });
   $('#fSize').addEventListener('keydown', (e) => {
     if (e.key === 'Enter') { e.preventDefault(); (e.target as HTMLElement).blur(); }
   });

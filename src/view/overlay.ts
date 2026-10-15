@@ -4,6 +4,7 @@ import { MIN } from '../constants';
 import { editor, level, tileById, type Hover } from '../editor/store';
 import { AX } from '../layout/axis';
 import { bandAround } from '../layout/bands';
+import { gapOf } from '../model/tree';
 import type { Rect } from '../model/types';
 import { round } from '../util';
 import { dom } from './dom';
@@ -14,22 +15,21 @@ const plusHtml = (x: number, y: number, cls: string) => `<div class="plus ${cls}
 
 export function showHover(h: Hover | null): void {
   const view = editor.view, L = level();
-  const shift = !!view.lastPointer?.shiftKey && !view.drag;
-  const g = L.frame.gutter;
+  // Ctrl+Shift: split points (Shift alone selects several tiles)
+  const lp = view.lastPointer, shift = !!lp?.shiftKey && !!lp?.ctrlKey && !view.drag;
   let html = '', cursor = '', hint = '';
 
   if (shift) {
     // idle markers: the middle of every tile's right and bottom edge
-    const room = 2 * MIN + g;
     for (const t of L.tiles) {
       if (h?.type === 'cut' && h.plan.edge.id === t.id) continue;
-      if (t.h >= room) html += plusHtml(t.x + t.w, t.y + t.h / 2, 'idle');
-      if (t.w >= room) html += plusHtml(t.x + t.w / 2, t.y + t.h, 'idle');
+      if (t.h >= 2 * MIN + L.frame.gutterY) html += plusHtml(t.x + t.w, t.y + t.h / 2, 'idle');
+      if (t.w >= 2 * MIN + L.frame.gutter) html += plusHtml(t.x + t.w / 2, t.y + t.h, 'idle');
     }
   }
 
   if (h?.type === 'cut') {
-    const p = h.plan, A = AX[p.ax];
+    const p = h.plan, A = AX[p.ax], g = gapOf(L.frame, p.ax); // the gap along the cut
     for (const id of p.ids) {
       const t = tileById(id);
       if (!t) continue;
@@ -59,8 +59,8 @@ export function showHover(h: Hover | null): void {
     cursor = 'on-plus';
     hint = p.equal
       ? `Click to split into ${n} equal parts · keys 2–9 change the number`
-      : bandAround(editor.doc, t) ? 'Click to split here · header/footer: snaps to squares and middles · Ctrl+Shift: equal parts · Alt: no snapping'
-        : 'Click to split here · snaps to ½ ⅓ ¼ and other tiles\' edges · Ctrl+Shift: equal parts · Alt: no snapping';
+      : bandAround(editor.doc, t) ? 'Click to split here · header/footer: snaps to squares and middles · add Alt: equal parts'
+        : 'Click to split here · snaps to ½ ⅓ ¼ and other tiles\' edges · add Alt: equal parts';
   } else if (h?.type === 'free') {
     html += boxHtml(h.rect, 'preview') + plusHtml(h.rect.x + h.rect.w / 2, h.rect.y + h.rect.h / 2, '');
     cursor = 'on-plus';
@@ -70,12 +70,13 @@ export function showHover(h: Hover | null): void {
     const line = s.axis === 'x' ? { x: s.c, y: s.a, w: 0, h: s.b - s.a } : { x: s.a, y: s.c, w: s.b - s.a, h: 0 };
     html += boxHtml(line, 'seamline ' + (s.axis === 'x' ? 'v' : 'h'));
     cursor = 'seam-' + s.axis;
-    hint = 'Drag to resize both sides · hold Shift to split tiles';
+    hint = 'Drag to resize both sides · Ctrl+Alt: open space between them (+ Shift: between all tiles this way) · Ctrl+Shift: split';
   } else if (shift) {
     hint = 'Point at a tile edge to split it there';
   }
 
   dom.hover.innerHTML = html;
+  dom.paper.classList.toggle('splitting', shift); // hides the resize handles
   dom.paper.classList.remove('seam-x', 'seam-y', 'on-plus');
   if (cursor) dom.paper.classList.add(cursor);
   showHint(hint);

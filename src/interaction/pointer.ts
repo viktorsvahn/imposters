@@ -1,20 +1,22 @@
 /* Pointer gestures on the paper: select, move, resize, draw, drag seams, cut,
    click to type, double-click to go inside. */
 
-import { MIN, type Handle } from '../constants';
+import { EPS, MIN, type Handle } from '../constants';
 import { applyCut, enterTile, exitScope, placeTile } from '../editor/actions';
 import { commit } from '../editor/history';
 import { render } from '../editor/hooks';
-import { editor, level, select, selectedTiles, tileById } from '../editor/store';
+import { editor, level, scopeTile, select, selectedTiles, tileById } from '../editor/store';
 import { AX, edgesOf } from '../layout/axis';
 import { expand } from '../layout/fill';
-import { matchedLines, snapAxis, targets } from '../layout/snap';
-import { isSection } from '../model/tree';
+import { spaceOut } from '../layout/seams';
+import { allTargets, matchedLines, snapAxis } from '../layout/snap';
+import { gapOf, isSection } from '../model/tree';
 import { dom } from '../view/dom';
 import { clearHover } from '../view/overlay';
 import { showGuides } from '../view/paper';
 import { deepTileEl, pxToMM, scopeEl, toMM } from './coords';
-import { caretToEnd, clickToType, stopEditing } from './editing';
+import { caretToEnd, clickToType, stopEditing, typingFor } from './editing';
+import { minimumSize } from '../view/measure';
 import { pickImage } from './files';
 import { clearHoverState, refreshHover, updateHover } from './hover';
 
@@ -24,7 +26,9 @@ function onPointerDown(e: PointerEvent): void {
   const target = e.target as HTMLElement;
   const tileEl = scopeEl(target);
   const deepEl = deepTileEl(target);
-  if (view.editing) {
+  // Ctrl+Shift on an edge splits — also the tile being typed in
+  const splitting = view.hover?.type === 'cut' && e.ctrlKey && e.shiftKey;
+  if (view.editing && !splitting) {
     // inside the tile being typed in: keep typing. In the text itself the
     // browser places the caret; elsewhere in the tile (padding, empty space
     // below short text) keep the focus and put the caret at the end.
@@ -35,6 +39,7 @@ function onPointerDown(e: PointerEvent): void {
     }
     stopEditing();
   }
+  if (view.editing) stopEditing();
   const at = { clientX: e.clientX, clientY: e.clientY };
   (document.activeElement as HTMLElement | null)?.blur?.();
 
@@ -42,23 +47,34 @@ function onPointerDown(e: PointerEvent): void {
   const handle = target.dataset.handle as Handle | undefined;
   const hv = view.hover;
   const L = level();
-  if (!handle && hv?.type === 'cut') {
+  if (hv?.type === 'cut' && (!handle || (e.ctrlKey && e.shiftKey))) {
     view.drag = { mode: 'cut', plan: hv.plan, start: pt };
   } else if (!handle && hv?.type === 'seam') {
     // drag = move the seam (both sides resize together)
-    const s = hv.seam, A = AX[s.axis], g = L.frame.gutter;
+    const s = hv.seam, A = AX[s.axis], g = gapOf(L.frame, s.axis);
     const Lt = s.L.map((id) => tileById(id)!), Rt = s.R.map((id) => tileById(id)!);
     view.drag = {
       mode: 'seam', seam: s, start: pt,
       origs: new Map([...Lt, ...Rt].map((t) => [t.id, { p: t[A.p], l: t[A.l] }])),
-      minDelta: Lt.length ? MIN - Math.min(...Lt.map((t) => t[A.l])) : -s.hi,
-      maxDelta: Rt.length ? Math.min(...Rt.map((t) => t[A.l])) - MIN : L.frame[A.size] - s.lo - g,
+      // neither side gets smaller than its content allows
+      minDelta: Lt.length ? Math.max(...Lt.map((t) => minimumSize(t, s.axis) - t[A.l])) : -s.hi,
+      maxDelta: Rt.length ? Math.min(...Rt.map((t) => t[A.l] - minimumSize(t, s.axis))) : L.frame[A.size] - s.lo - g,
+      level: new Map(L.tiles.map((t) => [t.id, { p: t[A.p], l: t[A.l] }])),
     };
   } else if (!handle && hv?.type === 'free') {
     view.drag = { mode: 'free', rect: hv.rect, start: pt };
   } else if (handle && tileEl) {
     const t = tileById(tileEl.dataset.id)!;
-    view.drag = { mode: 'resize', handle, start: pt, id: t.id, orig: { x: t.x, y: t.y, w: t.w, h: t.h } };
+    view.drag = {
+      mode: 'resize', handle, start: pt, id: t.id, orig: { x: t.x, y: t.y, w: t.w, h: t.h },
+      min: { w: minimumSize(t, 'x'), h: minimumSize(t, 'y') },
+    };
+    // a header's bottom edge takes the tiles right under it along, so it never covers them
+    if (t.role === 'header' && handle.includes('s')) {
+      const g = L.frame.gutterY, edge = t.y + t.h + g;
+      const under = L.tiles.filter((k) => k !== t && Math.abs(k.y - edge) < 0.5 && k.x < t.x + t.w && k.x + k.w > t.x);
+      view.drag.below = new Map(under.map((k) => [k.id, { y: k.y, h: k.h, min: minimumSize(k, 'y') }]));
+    }
   } else if (tileEl) {
     const id = tileEl.dataset.id!;
     if (e.shiftKey) {
@@ -85,7 +101,7 @@ function onPointerDown(e: PointerEvent): void {
     if (!e.shiftKey) view.selected.clear();
     const start = { ...pt };
     if (view.snap && !e.altKey) {
-      const T = targets(L, new Set()), thr = pxToMM(6);
+      const T = allTargets(editor.doc, L, scopeTile(), new Set()), thr = pxToMM(6);
       start.x += snapAxis({ s: pt.x, e: pt.x }, T.X, thr);
       start.y += snapAxis({ s: pt.y, e: pt.y }, T.Y, thr);
     }
@@ -109,10 +125,12 @@ function onPointerMove(e: PointerEvent): void {
   const snap = view.snap && !e.altKey;
   const thr = pxToMM(6);
   const L = level();
+  // snap lines: this level's, and those of tiles on other levels (e.g. the header of the tile next door)
+  const targets = (exclude: Set<string>) => allTargets(editor.doc, L, scopeTile(), exclude);
   let gx: number[] = [], gy: number[] = [], draft = null;
 
   if (d.mode === 'move') {
-    const T = targets(L, view.selected), b = d.bbox;
+    const T = targets(view.selected), b = d.bbox;
     if (snap) {
       dx += snapAxis(edgesOf(b.x + dx, b.w), T.X, thr);
       dy += snapAxis(edgesOf(b.y + dy, b.h), T.Y, thr);
@@ -123,14 +141,23 @@ function onPointerMove(e: PointerEvent): void {
       const t = tileById(id)!;
       t.x = o.x + dx; t.y = o.y + dy;
     }
+  } else if (d.mode === 'seam' && (e.ctrlKey || e.metaKey) && e.altKey) {
+    // Ctrl+Alt: open (drag right/down) or close space symmetrically at this gap; + Shift: at every gap
+    const s = d.seam, A = AX[s.axis];
+    for (const [id, o] of d.level) { const t = tileById(id)!; t[A.p] = o.p; t[A.l] = o.l; }
+    spaceOut(L.tiles, s.axis, L.frame, pt[s.axis] - d.start[s.axis], e.shiftKey ? undefined : { L: s.L, R: s.R }, (t) => minimumSize(t, s.axis));
   } else if (d.mode === 'seam') {
     const s = d.seam, A = AX[s.axis];
+    for (const [id, o] of d.level) { const t = tileById(id)!; t[A.p] = o.p; t[A.l] = o.l; } // keys let go mid-drag
     let delta = pt[s.axis] - d.start[s.axis];
-    const T = targets(L, new Set(d.origs.keys()));
+    const T = targets(new Set(d.origs.keys()));
     const lines = s.axis === 'x' ? T.X : T.Y;
     const edges = (dd: number) => ({ ...(s.L.length ? { e: s.lo + dd } : {}), ...(s.R.length ? { s: s.hi + dd } : {}) });
     if (snap) delta += snapAxis(edges(delta), lines, thr);
-    delta = Math.min(d.maxDelta, Math.max(d.minDelta, delta));
+    // past the content's limit it stretches like a rubber band, and springs back on release
+    if (delta < d.minDelta) delta = d.minDelta - rubber(d.minDelta - delta);
+    else if (delta > d.maxDelta) delta = d.maxDelta + rubber(delta - d.maxDelta);
+    d.delta = delta;
     for (const id of s.L) { const t = tileById(id)!, o = d.origs.get(id)!; t[A.l] = o.l + delta; }
     for (const id of s.R) { const t = tileById(id)!, o = d.origs.get(id)!; t[A.p] = o.p + delta; t[A.l] = o.l - delta; }
     if (snap) { const m = matchedLines(edges(delta), lines); if (s.axis === 'x') gx = m; else gy = m; }
@@ -138,20 +165,29 @@ function onPointerMove(e: PointerEvent): void {
     return;
   } else if (d.mode === 'resize') {
     const o = d.orig, h = d.handle, t = tileById(d.id)!;
-    const T = targets(L, new Set([d.id]));
+    const T = targets(new Set([d.id, ...(d.below?.keys() ?? [])]));
     let l = o.x, r = o.x + o.w, top = o.y, bot = o.y + o.h;
     const sn = (edges: Parameters<typeof snapAxis>[0], lines: Parameters<typeof snapAxis>[1]) => (snap ? snapAxis(edges, lines, thr) : 0);
     if (h.includes('w')) { l = o.x + dx; l += sn({ s: l }, T.X); l = Math.min(l, r - MIN); }
     if (h.includes('e')) { r = o.x + o.w + dx; r += sn({ e: r }, T.X); r = Math.max(r, l + MIN); }
     if (h.includes('n')) { top = o.y + dy; top += sn({ s: top }, T.Y); top = Math.min(top, bot - MIN); }
     if (h.includes('s')) { bot = o.y + o.h + dy; bot += sn({ e: bot }, T.Y); bot = Math.max(bot, top + MIN); }
+    // smaller than the content allows: it stretches like a rubber band, and springs back on release
+    if (bot - top < d.min.h) { const hh = d.min.h - rubber(d.min.h - (bot - top)); if (h.includes('n')) top = bot - hh; else bot = top + hh; }
+    if (r - l < d.min.w) { const ww = d.min.w - rubber(d.min.w - (r - l)); if (h.includes('w')) l = r - ww; else r = l + ww; }
+    if (d.below?.size) {
+      // the tiles under a header follow, but keep the height their content needs
+      const g = L.frame.gutterY;
+      for (const b of d.below.values()) bot = Math.min(bot, b.y + b.h - b.min - g);
+      for (const [id, b] of d.below) { const k = tileById(id)!; k.y = bot + g; k.h = b.y + b.h - k.y; }
+    }
     Object.assign(t, { x: l, y: top, w: r - l, h: bot - top });
     if (snap) {
       gx = matchedLines({ s: l, e: r }, T.X);
       gy = matchedLines({ s: top, e: bot }, T.Y);
     }
   } else {
-    const T = targets(L, new Set());
+    const T = targets(new Set());
     let x2 = pt.x, y2 = pt.y;
     const ex = x2 >= d.start.x ? 'e' : 's', ey = y2 >= d.start.y ? 'e' : 's';
     if (snap) {
@@ -169,6 +205,27 @@ function onPointerMove(e: PointerEvent): void {
   showGuides(gx, gy, draft);
 }
 
+/** How far past a limit a drag gets: a little, with growing resistance (mm). */
+const rubber = (over: number): number => 12 * (1 - Math.exp(-over / 30));
+
+/** A tile dragged smaller than its content allows springs back (animated). */
+function springBack(d: NonNullable<typeof editor.view.drag>): void {
+  let moved = false;
+  if (d.mode === 'resize') {
+    const t = tileById(d.id)!, h = d.handle;
+    if (t.h < d.min.h - EPS) { if (h.includes('n')) t.y = t.y + t.h - d.min.h; t.h = d.min.h; moved = true; }
+    if (t.w < d.min.w - EPS) { if (h.includes('w')) t.x = t.x + t.w - d.min.w; t.w = d.min.w; moved = true; }
+  } else if (d.mode === 'seam' && d.delta !== undefined && (d.delta < d.minDelta - EPS || d.delta > d.maxDelta + EPS)) {
+    const s = d.seam, A = AX[s.axis], delta = Math.min(d.maxDelta, Math.max(d.minDelta, d.delta));
+    for (const id of s.L) { const t = tileById(id)!, o = d.origs.get(id)!; t[A.l] = o.l + delta; }
+    for (const id of s.R) { const t = tileById(id)!, o = d.origs.get(id)!; t[A.p] = o.p + delta; t[A.l] = o.l - delta; }
+    moved = true;
+  }
+  if (!moved) return;
+  dom.paper.classList.add('snapback');
+  setTimeout(() => dom.paper.classList.remove('snapback'), 250);
+}
+
 function onPointerUp(): void {
   const view = editor.view, d = view.drag;
   if (!d) return;
@@ -179,6 +236,7 @@ function onPointerUp(): void {
     // a plain click on text starts typing right away, at any depth
     if (clickToType(tileById(d.deepId), d.at)) { refreshHover(); return; }
   }
+  if (d.mode === 'resize' || d.mode === 'seam') springBack(d);
   if (d.mode === 'draw' && d.moved && d.rect && d.rect.w >= MIN && d.rect.h >= MIN) placeTile(d.rect);
   if (d.mode === 'cut') applyCut(d.plan);
   if (d.mode === 'free') { placeTile(d.rect); commit(); }
@@ -187,11 +245,14 @@ function onPointerUp(): void {
   refreshHover();
 }
 
+const DOUBLE_CLICK_MS = 600;
+
 function onDoubleClick(e: MouseEvent): void {
   // pointer capture retargets click/dblclick to the paper, so hit-test ourselves
   const hit = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null;
-  // while typing, double-click only ever selects a word (fast clicking must not change mode)
-  if (editor.view.editing && hit?.closest('.tile.editing')) return;
+  // a double-click goes inside the tile — unless you were already typing there: then it selects a word
+  // (the first click of a double-click starts typing, so typing that just began doesn't count)
+  if (editor.view.editing && hit?.closest('.tile.editing') && typingFor() > DOUBLE_CLICK_MS) return;
   const tileEl = scopeEl(hit);
   if (!tileEl || !hit) return;
   const t = tileById(tileEl.dataset.id)!;

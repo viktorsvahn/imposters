@@ -1,5 +1,9 @@
-/* What a click / drag at the pointer would do. Shift reveals cut buttons on
-   tile edges (Ctrl+Shift: equal parts); without it, seams can be dragged. */
+/* What a click / drag at the pointer would do. Ctrl+Shift reveals cut buttons
+   on tile edges (Ctrl+Alt+Shift: equal parts); without them, seams can be
+   dragged. Shift alone is for selecting several tiles. */
+
+/** The keys that show split points: Ctrl+Shift. */
+export const splitKeys = (p: { shiftKey: boolean; ctrlKey: boolean }): boolean => p.shiftKey && p.ctrlKey;
 
 import { editor, level, type Hover, type PointerInfo } from '../editor/store';
 import { cutPlan, edgeAt } from '../layout/cuts';
@@ -17,13 +21,18 @@ export function updateHover(e: PointerInfo | (MouseEvent & { ctrlKey: boolean })
   view.lastPointer = lp;
   let h: Hover | null = null;
   const target = document.elementFromPoint(lp.clientX, lp.clientY) as HTMLElement | null;
-  if (!view.drag && target && dom.paper.contains(target) && !target.dataset.handle &&
-      !(view.editing && target.closest('.tile.editing'))) {
+  // while splitting (Ctrl+Shift) the resize handles step aside, so a split can go anywhere on an edge
+  const split = splitKeys(lp);
+  if (!view.drag && target && dom.paper.contains(target) && (!target.dataset.handle || split) &&
+      (split || !(view.editing && target.closest('.tile.editing')))) {
     const pt = toMM(lp), L = level();
-    if (lp.shiftKey) {
-      const edge = edgeAt(L, pt, pxToMM(14), view.editing);
+    // Ctrl+Alt+Shift right on the line between tiles: drag it to space them all out (elsewhere: equal parts)
+    const allGaps = split && lp.altKey ? seamAt(L, pt, pxToMM(4)) : null;
+    if (allGaps) h = { type: 'seam', seam: allGaps };
+    else if (split) {
+      const edge = edgeAt(L, pt, pxToMM(14), null);
       const plan = edge && cutPlan(editor.doc, L, edge, {
-        snap: view.snap && !lp.altKey, equal: lp.ctrlKey, parts: view.parts, thr: pxToMM(8),
+        snap: view.snap, equal: lp.altKey, parts: view.parts, thr: pxToMM(8),
       });
       if (plan) h = { type: 'cut', plan };
       else if (!edge && !scopeEl(target)) {

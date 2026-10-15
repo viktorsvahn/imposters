@@ -12,6 +12,8 @@
 .tile > .kids > .tile { pointer-events: auto; }
 .tile > .bleed { position: absolute; z-index: -1; pointer-events: none; }
 .tile.section > .content { display: none; }
+/* a tile without a fill: tinted in the editor so you can see where it is (not printed, not published) */
+.tile.nofill { background-color: rgba(110, 125, 145, .09) !important; }
 
 /* inside a tile: outline every sub-tile so the divisions are visible */
 .paper.scoped .tile.live::after {
@@ -27,6 +29,7 @@
 .tile.has-cols > .content { flex: 1 1 auto; }
 .tile > .content > :is(div, p, h1, h2, h3, ul, ol) { margin: 0 0 var(--ps, 0); }
 .tile > .content :is(ul, ol) { padding-left: 1.3em; }
+.tile > .content li:not(:last-child) { margin-bottom: var(--ps, 0); } /* space after paragraphs: list items are paragraphs too */
 .tile > .content:empty::before { content: "Click to type"; opacity: .4; }
 .tile.scope > .content:empty::before { content: none; }
 .tile.editing { cursor: text; }
@@ -57,3 +60,35 @@
 .h-se { left: 100%; top: 100%; cursor: nwse-resize; }
 .h-ne { left: 100%; top: 0;    cursor: nesw-resize; }
 .h-sw { left: 0;    top: 100%; cursor: nesw-resize; }
+
+/* while splitting (Ctrl+Shift), resize handles step aside */
+.paper.splitting .handle { visibility: hidden; }
+
+/* a tile dragged smaller than its content allows springs back */
+.paper.snapback .tile { transition: top .2s ease-out, height .2s ease-out, left .2s ease-out, width .2s ease-out; }
+
+/* lists across text columns, row by row */
+.tile > .content[data-flow="across"] :is(ol, ul) { display: grid; grid-template-columns: repeat(var(--cols), minmax(0, 1fr)); column-gap: var(--colgap); }
+
+/* a background image behind the text */
+.tile .bgimg { position: absolute; inset: 0; width: 100%; height: 100%; z-index: -1; pointer-events: none; border-radius: inherit; }
+
+/* tables in text: a bold header over a heavy rule, light lines between rows, a heavy rule at the end */
+.tile > .content table { border-collapse: collapse; width: 100%; margin: 0 0 var(--ps, 0); }
+.tile > .content :is(th, td) { padding: .36em .48em; text-align: left; vertical-align: baseline; }
+.tile > .content :is(th, td):first-child { padding-left: 0; }
+.tile > .content :is(th, td):last-child { padding-right: 0; }
+.tile > .content thead th { font-weight: 600; padding-top: 0; border-bottom: var(--tbl-rule, .09em) solid currentColor; }
+.tile > .content tbody td { border-bottom: 1px solid var(--tbl-line, rgba(0, 0, 0, .22)); }
+.tile > .content tbody tr:last-child td { border-bottom: var(--tbl-rule, .09em) solid currentColor; }
+.tile > .content :is(th, td).num { text-align: right; font-variant-numeric: tabular-nums; }
+.tile.editing > .content :is(th, td) { outline: 1px dashed rgba(47, 111, 237, .25); outline-offset: -1px; }
+
+/* the design's watermark (behind every tile) and logos (banner, footer) */
+.paper > .watermark { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.tile > .brand { position: absolute; display: flex; align-items: center; gap: 6mm; pointer-events: none; z-index: 1; }
+.tile > .brand img { height: var(--logo-h); max-height: 100%; width: auto; }
+.tile > .brand[data-align="left"] { justify-content: flex-start; }
+.tile > .brand[data-align="right"] { justify-content: flex-end; }
+.tile > .brand[data-align="center"] { justify-content: center; }
+.tile > .brand[data-align="spread"] { justify-content: space-between; }

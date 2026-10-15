@@ -11,8 +11,14 @@ import type { ClientPoint } from './coords';
 /** The content element being typed in (null when not typing). */
 export const editingContent = (): HTMLDivElement | null => contentEl(editor.view.editing);
 
+let editingSince = 0;
+
+/** How long (ms) the current typing has been going on. */
+export const typingFor = (): number => performance.now() - editingSince;
+
 export function startEditing(t: Tile | null, at: ClientPoint | null = null): void {
   if (!t || isSection(t) || t.type !== 'text') return;
+  editingSince = performance.now();
   editor.view.editing = t.id;
   select(t.id);
   render();

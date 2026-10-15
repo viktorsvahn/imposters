@@ -8,7 +8,7 @@ import type { ColorRoleId, Doc, Tile } from './types';
 import { isSection, leavesOf } from './tree';
 
 const CASCADE = new Set<keyof Tile>([
-  'color', 'font', 'fontSize', 'align', 'vAlign', 'ts', 'bold', 'italic', 'underline', 'leading', 'ps', 'cols',
+  'color', 'font', 'fontSize', 'align', 'vAlign', 'ts', 'bold', 'italic', 'underline', 'leading', 'ps', 'cols', 'hyphens', 'flow',
 ]);
 
 type Writable = Record<string, unknown>;

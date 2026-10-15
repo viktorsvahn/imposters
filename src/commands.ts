@@ -1,31 +1,34 @@
 /* Named commands, used by toolbar buttons (data-act="…") and shortcuts. */
 
 import {
-  addTile, arrangeSelected, deleteSelected, duplicateSelected, enterTile, exitScope, fillGaps, fillSelected,
+  addTile, arrangeSelected, deleteSelected, duplicateSelected, enterTile, exitScope, fillGaps, fillSelected, mergeSelected,
   reorderSelected, splitSelected, type ArrangeKind,
 } from './editor/actions';
 import { commit, redo, undo } from './editor/history';
-import { hooks, render } from './editor/hooks';
+import { notify, render } from './editor/hooks';
 import { editor, selectedTiles } from './editor/store';
+import { startEditing } from './interaction/editing';
 import { pickImage, saveDocument } from './interaction/files';
 import { setZoom, zoomFit } from './interaction/zoom';
-import { newDocument } from './model/document';
 import { isSection, leavesOf } from './model/tree';
+import { desktop } from './project/backend';
+import { chooseProject, exportHtml, exportPdf, flush, newPoster } from './project/session';
 import { $ } from './view/dom';
 import { fittingFontSize } from './view/paper';
 
 export type Command =
-  | 'add-text' | 'add-image' | 'split-v' | 'split-h' | 'fill' | 'fill-all'
+  | 'add-text' | 'add-image' | 'split-v' | 'split-h' | 'merge' | 'fill' | 'fill-all'
   | 'duplicate' | 'delete' | 'front' | 'back' | 'undo' | 'redo'
-  | 'zoom-in' | 'zoom-out' | 'zoom-fit' | 'new' | 'open' | 'save' | 'print' | 'enter' | 'up';
+  | 'zoom-in' | 'zoom-out' | 'zoom-fit' | 'new' | 'open' | 'save' | 'print' | 'html' | 'enter' | 'up';
 
 export function act(name: Command): void {
   const ts = selectedTiles();
   switch (name) {
-    case 'add-text': addTile('text'); break;
+    case 'add-text': startEditing(addTile('text')); break; // type straight away
     case 'add-image': pickImage(null); break;
     case 'split-v': splitSelected(true); break;
     case 'split-h': splitSelected(false); break;
+    case 'merge': mergeSelected(); break;
     case 'fill': fillSelected(); break;
     case 'fill-all': fillGaps(); break;
     case 'duplicate': duplicateSelected(); break;
@@ -37,18 +40,11 @@ export function act(name: Command): void {
     case 'zoom-in': setZoom(editor.view.zoom * 1.25); break;
     case 'zoom-out': setZoom(editor.view.zoom / 1.25); break;
     case 'zoom-fit': zoomFit(); break;
-    case 'new':
-      if (!confirm('Start a new document? Unsaved changes will be lost (use Save first).')) break;
-      editor.doc = newDocument();
-      Object.assign(editor.view, { scope: null, editing: null, selected: new Set() });
-      commit(); // undo can still bring the old poster back
-      hooks.docReplaced();
-      render();
-      zoomFit();
-      break;
-    case 'open': $<HTMLInputElement>('#fileDoc').click(); break;
-    case 'save': saveDocument(); break;
-    case 'print': window.print(); break;
+    case 'new': void newPoster(); break;
+    case 'open': if (desktop) void chooseProject(); else $<HTMLInputElement>('#fileDoc').click(); break;
+    case 'save': if (desktop) void flush().then(() => notify('Saved')); else saveDocument(); break;
+    case 'print': void exportPdf(); break;
+    case 'html': void exportHtml(); break;
     case 'enter': if (ts.length === 1) enterTile(ts[0]); break;
     case 'up': exitScope(); break;
   }

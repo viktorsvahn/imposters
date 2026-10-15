@@ -11,6 +11,8 @@ export const hooks = {
   refreshHover: (): void => {},
   /** Finish text editing (writes the typed text back into the document). */
   stopEditing: (): void => {},
+  /** Keep the document (called after every change, with it as JSON). */
+  save: (_json: string): void => {},
   /** Show a short message. */
   notify: (_message: string): void => {},
 };

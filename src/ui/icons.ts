@@ -21,4 +21,11 @@ export const icons = {
   border: svg('<rect x="2.5" y="2.5" width="11" height="11" fill="none" stroke-dasharray="2 1.5"/><line x1="2.5" x2="13.5" y1="13.5" y2="13.5" stroke-width="2.4"/>'),
   bleed: svg('<rect x="4" y="5" width="8" height="6" fill="currentColor" stroke="none"/>' + line(1, 4, 8) + line(12, 15, 8) +
     '<line x1="1" x2="1" y1="5" y2="11"/><line x1="15" x2="15" y1="5" y2="11"/>'),
+  // sidebar: poster variants (a tree), the image pool, the data workspace
+  posters: svg('<rect x="1.5" y="1.5" width="5" height="4" fill="none"/><rect x="9.5" y="5.5" width="5" height="4" fill="none"/>' +
+    '<rect x="9.5" y="11" width="5" height="4" fill="none"/><path d="M4 5.5v7.5h5.5M4 7.5h5.5" fill="none"/>'),
+  images: svg('<rect x="1.5" y="2.5" width="13" height="11" rx="1" fill="none"/><circle cx="5.5" cy="6" r="1.3" fill="none"/>' +
+    '<path d="M2 12l4-4 3 3 2-2 3.5 3.5" fill="none"/>'),
+  data: svg('<rect x="1.5" y="2.5" width="13" height="11" rx="1" fill="none"/>' + line(1.5, 14.5, 6) + line(1.5, 14.5, 9.75) +
+    '<line x1="6" x2="6" y1="2.5" y2="13.5"/>'),
 };

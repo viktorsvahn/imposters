@@ -1,10 +1,7 @@
 /* Undo history and autosave. Every completed change calls commit(). */
 
-import { STORAGE } from '../constants';
 import { normalizeLayout } from '../layout/reflow';
-import { loadDocument, newDocument } from '../model/document';
-import type { Doc } from '../model/types';
-import { hooks, notify } from './hooks';
+import { hooks } from './hooks';
 import { editor, tileById } from './store';
 
 const LIMIT = 200;
@@ -52,24 +49,7 @@ function restore(i: number): void {
   hooks.render();
 }
 
-let saveWarned = false;
+/** Save the document (through hooks.save — the open project). */
 export function autosave(s: string = JSON.stringify(editor.doc)): void {
-  try {
-    localStorage.setItem(STORAGE.doc, s);
-    saveWarned = false;
-  } catch {
-    if (!saveWarned) notify('Autosave failed (document too large) — use Save to keep your work');
-    saveWarned = true;
-  }
-}
-
-/** The autosaved document (or the one saved by the old version), else a new one. */
-export function loadSavedDocument(): Doc {
-  try {
-    const saved = localStorage.getItem(STORAGE.doc) ?? localStorage.getItem(STORAGE.legacyDoc);
-    if (saved) return loadDocument(JSON.parse(saved));
-  } catch {
-    /* unreadable: start fresh */
-  }
-  return newDocument();
+  hooks.save(s);
 }

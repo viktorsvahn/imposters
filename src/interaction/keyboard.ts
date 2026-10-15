@@ -1,6 +1,6 @@
 /* Keyboard shortcuts. */
 
-import { enterTile, exitScope, setParts } from '../editor/actions';
+import { enterTile, exitScope, mergeMode, setParts, splitsInside } from '../editor/actions';
 import { commit } from '../editor/history';
 import { notify, render } from '../editor/hooks';
 import { editor, level, selectedTiles, tileById } from '../editor/store';
@@ -73,8 +73,9 @@ function onKey(e: KeyboardEvent): void {
     case 'e': if (ts.length === 1) enterTile(ts[0]); break;
     case 't': act('add-text'); break;
     case 'i': act('add-image'); break;
-    case 'v': if (ts.length) act('split-v'); break;
-    case 'h': if (ts.length) act('split-h'); break;
+    case 'v': if (ts.length || splitsInside()) act('split-v'); break;
+    case 'h': if (ts.length || splitsInside()) act('split-h'); break;
+    case 'm': if (mergeMode()) act('merge'); break;
     case 'f': if (ts.length) act('fill'); break;
     case '+':
     case '=': act('zoom-in'); break;
